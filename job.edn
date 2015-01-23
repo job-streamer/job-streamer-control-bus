@@ -1,0 +1,3 @@
+{:job {:id "example-job-1" :restartable true
+       :steps [{:id "step-1" :batchlet {:ref "example.Batchlet1"} :next "step-2"}
+               {:id "step-2" :batchlet {:ref "example.FailBatchlet"}}]}}

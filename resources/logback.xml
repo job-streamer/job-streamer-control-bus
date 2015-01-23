@@ -1,0 +1,23 @@
+<configuration>
+  <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+    <target>System.out</target>
+    <encoder>
+      <pattern>%d{yyyy/MM/dd HH:mm:ss} %-5level %logger{10} %msg%n</pattern>
+    </encoder>
+  </appender>
+
+  <appender name="datomic" class="net.unit8.job_streamer.control_bus.DatomicAppender">
+    <uri>datomic:mem://job-streamer</uri>
+  </appender>
+
+  <logger name="job-streamer.control_bus" level="debug"/>
+  <logger name="net.unit8" level="debug"/>
+
+  <logger name="job-streamer">
+    <appender-ref ref="datomic"/>
+  </logger>
+
+  <root level="info">
+    <appender-ref ref="STDOUT"/>
+  </root>
+</configuration>
