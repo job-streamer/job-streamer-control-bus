@@ -21,13 +21,20 @@
   [(part "job")])
 
 (defn dbschema []
-  [(schema job
+  [(schema application
+           (fields
+            [id :string :indexed :unique-value :fulltext]
+            [description :string]
+            [classpath :string :many]
+            [jobs :ref :many]))
+   (schema job
            (fields
             [id :string  :indexed :unique-value :fulltext]
             [restartable :boolean]
             [property :ref :many]
-            [step :ref :many]
+            [steps :ref :many]
             [edn-notation :string]
+            [schedule :ref]
             [executions :ref :many]))
    (schema property
            (fields
@@ -82,7 +89,6 @@
             [exception :string]))
    (schema schedule
            (fields
-            [job :ref]
             [cron-notation :string]))])
 
 (defn generate-enums [tempid-fn & enums]

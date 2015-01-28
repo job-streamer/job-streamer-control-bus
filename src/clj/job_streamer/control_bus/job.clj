@@ -20,10 +20,15 @@
    job-id))
 
 (defn find-all [q]
-  (let [base-query '{:find [[(pull ?job [:* {:job/executions [:db/id
-                                                              :job-execution/start-time
-                                                              :job-execution/end-time
-                                                              {:job-execution/batch-status [:db/ident]}]}]) ...]]
+  (let [base-query '{:find [[(pull ?job
+                                   [:*
+                                    {:job/executions
+                                     [:db/id
+                                      :job-execution/start-time
+                                      :job-execution/end-time
+                                      {:job-execution/batch-status [:db/ident]}]}
+                                    {:job/schedule
+                                     [:db/id :schedule/cron-notation]}]) ...]]
                      :in [$ ?query]
                      :where [[?job :job/id ?job-id]]}]
     (model/query
@@ -50,13 +55,16 @@
     (update-in je [:job-execution/step-executions]
                #(map (fn [step-execution]
                        (assoc step-execution :step-execution/logs
-                              (model/query '{:find [[(pull ?log [:* {:execution-log/level [:db/ident]}]) ...]]
-                                             :in [$ ?step-execution-id ?instance-id]
-                                             :where [[?log :execution-log/step-execution-id ?step-execution-id]
-                                                     [?log :execution-log/agent ?agent]
-                                                     [?agent :agent/instance-id ?instance-id]]}
-                                           (:step-execution/step-execution-id step-execution)
-                                           (get-in je [:job-execution/agent :agent/instance-id])))) %))))
+                              (->> (model/query '{:find [[(pull ?log [:* {:execution-log/level [:db/ident]}]) ...]]
+                                                :in [$ ?step-execution-id ?instance-id]
+                                                :where [[?log :execution-log/step-execution-id ?step-execution-id]
+                                                        [?log :execution-log/agent ?agent]
+                                                        [?agent :agent/instance-id ?instance-id]]}
+                                              (:step-execution/step-execution-id step-execution)
+                                              (get-in je [:job-execution/agent :agent/instance-id]))
+                                   (sort (fn [l1 l2]
+                                           (compare (:execution-log/date l1)
+                                                    (:execution-log/date l2))))))) %))))
 
 (defn find-step-execution [instance-id step-execution-id]
   (model/query
@@ -68,26 +76,26 @@
              [?step-execution :step-execution/step-execution-id ?step-execution-id]]}
    instance-id step-execution-id))
 
-(defn edn->datoms [job]
+(defn edn->datoms [job job-id]
   (let [datoms (atom [])
         step-refs (doall
-                   (for [step (:steps job)]
+                   (for [step (:job/steps job)]
                        (let [id (d/tempid :db.part/user)]
                          (swap! datoms conj
                                 (merge
                                  {:db/id id
-                                  :step/id (:id step)
-                                  :step/start-limit (get job :start-limit 0)
-                                  :step/allow-start-if-complete (get job :allow-start-if-complete false)}
-                                 (when-let [batchlet (:batchlet step)]
+                                  :step/id (:step/id step)
+                                  :step/start-limit (get job :step/start-limit 0)
+                                  :step/allow-start-if-complete (get job :step/allow-start-if-complete false)}
+                                 (when-let [batchlet (:step/batchlet step)]
                                    (let [batchlet-id (d/tempid :db.part/user)]
-                                     (swap! datoms conj {:db/id batchlet-id :batchlet/ref (:ref batchlet)})
+                                     (swap! datoms conj {:db/id batchlet-id :batchlet/ref (:batchlet/ref batchlet)})
                                      {:step/batchlet batchlet-id}))))
                          id)))]
     
     (conj @datoms
-          {:db/id (d/tempid :db.part/user)
-           :job/id (:id job)
-           :job/restartable (:restartable job)
+          {:db/id (or job-id (d/tempid :db.part/user)) 
+           :job/id (:job/id job)
+           :job/restartable (or (:job/restartable job) true) 
            :job/edn-notation (pr-str job)
-           :job/step step-refs})))
+           :job/steps step-refs})))

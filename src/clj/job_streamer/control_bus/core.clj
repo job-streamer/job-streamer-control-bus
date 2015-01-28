@@ -12,6 +12,7 @@
                                       (job :as job)
                                       (multicast :as multicast)
                                       (server :as server)
+                                      (scheduler :as scheduler)
                                       (dispatcher :as dispatcher)))
   (:use [clojure.core.async :only [chan put! <! go-loop timeout]]
         [job-streamer.control-bus.agent :only [find-agent execute-job] :as ag]
@@ -62,7 +63,7 @@
   (if-let [step (model/query '{:find [?step .]
                                :in [$ ?id ?step-name]
                                :where [[?job :job/executions ?id]
-                                       [?job :job/step ?step]
+                                       [?job :job/steps ?step]
                                        [?step :step/id ?step-name]]}
                              id step-name)]
     (model/transact [{:db/id #db/id[db.part/user -1]
@@ -96,6 +97,8 @@
   :malformed? #(parse-edn % ::data)
   :exists? (when-let [job (job/find-by-id job-id)]
              {:job job})
+  :put! (fn [{job ::data job-id :job}]
+          (model/transact (job/edn->datoms job job-id)))
   :handle-ok (fn [ctx]
                (model/pull '[:*] (:job ctx))))
 
@@ -122,53 +125,74 @@
   :handle-ok (fn [ctx]
                (job/find-executions job-id)))
 
+(defresource schedule-resource [job-id]
+  :available-media-types ["application/edn"]
+  :allowed-methods [:post]
+  :malformed? #(parse-edn % ::data)
+  :post! (fn [ctx]
+           (scheduler/schedule job-id (get-in ctx [::data :schedule/cron-notation])))
+  :handle-ok (fn [ctx]))
+
 (defresource jobs-resource
   :available-media-types ["application/edn"]
   :allowed-methods [:get :post]
-  :malformed? #(parse-edn % ::data)
-  :post! (fn [{{job :job} ::data}]
-           (println job)
-           (println (job/edn->datoms job))
-           (model/transact (job/edn->datoms job))
+  :malformed? #(parse-edn % :job)
+  :post! (fn [{job :job}]
+           (model/transact (job/edn->datoms job nil))
            "OK")
   :handle-ok (fn [{{{query "q"} :query-params} :request}]
                (let []
-                 (vec (map (fn [{job-id :job/id executions :job/executions}]
+                 (vec (map (fn [{job-id :job/id
+                                 executions :job/executions
+                                 schedule :job/schedule}]
                              (merge {:job/id job-id
                                      :job/executions executions}
                                     (when executions
                                       {:job/last-execution
                                        (->> executions
                                             (sort #(compare (:job-execution/start-time %2)
-                                                              (:job-execution/start-time %1)))
-                                            first)})))
+                                                            (:job-execution/start-time %1)))
+                                            first)})
+                                    (when schedule
+                                      (let [next-start (first (scheduler/fire-times job-id))]
+                                        {:job/next-execution
+                                         {:job-execution/start-time next-start}}))))
                            (job/find-all query))))))
 
 (defn wrap-same-origin-policy [handler]
   (fn [req]
-    (when-let [resp (handler req)]
-      (header resp "Access-Control-Allow-Origin" "*"))))
+    (if (= (:request-method req) :options)
+      ;;Pre-flight request
+      {:status 200
+       :headers {"Access-Control-Allow-Methods" "POST,GET,PUT,DELETE,OPTIONS"
+                 "Access-Control-Allow-Origin" "*"
+                 "Access-Control-Allow-Headers" "Content-Type"}}
+      (when-let [resp (handler req)]
+        (header resp "Access-Control-Allow-Origin" "*")))))
 
 (defroutes app-routes
   (ANY "/jobs" [] jobs-resource)
   (ANY ["/job/:job-id/executions" :job-id #".*"] [job-id] (executions-resource job-id))
+  (ANY ["/job/:job-id/schedule" :job-id #".*"] [job-id]   (schedule-resource job-id))
   (ANY ["/job/:job-id/execution/:id" :job-id #".*" :id #"\d+"]
       [job-id id]
     (execution-resource job-id (Long/parseLong id)))
   (ANY "/job/:id"  [id] (job-resource id))
   (ANY "/agents" [] ag/agents-resource)
+  (ANY "/deploy" [] )
   (GET "/logs" [] (pr-str (model/query '{:find [[(pull ?log [*]) ...]] :where [[?log :execution-log/level]]}))))
 
 (defn -main [& {:keys [port] :or {port 45102}}]
   (init)
   (multicast/start port)
+  (scheduler/start "localhost" port)
   (dispatcher/start)
   (go-loop []
     (let [jobs (job/find-undispatched)]
       (doseq [[execution-request job parameter] jobs]
         (dispatcher/submit {:request-id execution-request
-                             :job job
-                             :parameter parameter}))
+                            :job job
+                            :parameter parameter}))
       (<! (timeout 2000))
       (recur)))
 

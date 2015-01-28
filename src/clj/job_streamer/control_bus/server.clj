@@ -1,5 +1,6 @@
 (ns job-streamer.control-bus.server
-  (:require [ring.util.servlet :as servlet])
+  (:require [ring.util.servlet :as servlet]
+            [clojure.tools.logging :as log])
   (:import [net.unit8.wscl ClassProvider]
            [net.unit8.logback.server WebSocketReceiver]
            [org.xnio ByteBufferSlicePool]
@@ -47,10 +48,15 @@
                  (onFullTextMessage
                    [channel message]
                    (when on-message (on-message channel (.getData message))))
-                 (onFullCloseMessage
-                   [channel message]
+                 (onCloseMessage
+                   [message channel]
                    (when on-close (on-close channel message))))))
-      (.resumeReceives channel))))
+      (.resumeReceives channel)
+      (.addCloseTask channel
+                     (proxy [org.xnio.ChannelListener] []
+                       (handleEvent [channel]
+                         (log/warn "Agent close: " channel)
+                         (when on-close (on-close channel nil))))))))
 
 (defn run-server [ring-handler & {port :port websockets :websockets}]
   (let [ring-servlet (servlet/servlet ring-handler)
