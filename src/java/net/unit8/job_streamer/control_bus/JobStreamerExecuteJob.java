@@ -18,14 +18,14 @@ public class JobStreamerExecuteJob implements Job {
     @Override
     public void execute(JobExecutionContext context) throws JobExecutionException {
         JobDataMap data = context.getMergedJobDataMap();
-        String jobId = data.getString("job-id");
+        String jobName = data.getString("job-name");
         String host = data.getString("host");
         int port = data.getInt("port");
 
         URLConnection conn;
         try {
             URL url = new URL("http://" + host + ":" + port
-                    + "/job/" + jobId
+                    + "/job/" + jobName
                     + "/executions");
 
             conn = url.openConnection();

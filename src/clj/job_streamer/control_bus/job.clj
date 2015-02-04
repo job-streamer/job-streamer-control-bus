@@ -5,12 +5,13 @@
 
 (defn find-undispatched []
   (model/query
-   '{:find [?job-execution ?job-obj ?parameter]
-    :where [[?job-execution :job-execution/batch-status :batch-status/registered]
-            [?job-execution :job-execution/job-parameters ?parameter]
-            [?job :job/executions ?job-execution]
-            [?job :job/edn-notation ?edn-notation]
-            [(clojure.edn/read-string ?edn-notation) ?job-obj]]}))
+   '{:find [?job-execution ?job-obj ?param-map]
+     :where [[?job-execution :job-execution/batch-status :batch-status/registered]
+             [?job-execution :job-execution/job-parameters ?parameter]
+             [?job :job/executions ?job-execution]
+             [?job :job/edn-notation ?edn-notation]
+             [(clojure.edn/read-string ?edn-notation) ?job-obj]
+             [(clojure.edn/read-string ?parameter) ?param-map]]}))
 
 (defn find-by-id [job-id]
   (model/query 
@@ -18,6 +19,7 @@
      :in $ ?job-id 
      :where [?e :job/id ?job-id]]
    job-id))
+
 
 (defn find-all [q]
   (let [base-query '{:find [[(pull ?job
@@ -38,12 +40,23 @@
      (or q ""))))
 
 (defn find-executions [job-id]
-  (vec (model/query
-        '{:find [(pull ?job-execution [*])]
+  (->> (model/query
+        '{:find [[(pull ?job-execution
+                        [:db/id
+                         :job-execution/start-time
+                         :job-execution/end-time
+                         :job-execution/job-parameters
+                         {:job-execution/batch-status [:db/ident]
+                          :job-execution/agent
+                          [:agent/instance-id :agent/name]}]) ...]]
           :in [$ ?job-id]
           :where [[?job :job/id ?job-id]
-                  [?job :job/executions ?job-execution]]}
-        job-id)))
+                  [?job :job/executions ?job-execution]
+                  [?job-execution :job-execution/start-time]]}
+        job-id)
+       (sort #(compare (:job-execution/start-time %2)
+                       (:job-execution/start-time %1)))
+       vec))
 
 (defn find-execution [job-id job-execution]
   (let [je (model/pull '[:*

@@ -13,8 +13,11 @@
                                       "] at host [" (:host agt) "]" e)
                            (put! dispatcher-ch execution-request))
                :on-success (fn [{:keys [execution-id]}]
-                             (model/transact [{:db/id (:request-id execution-request)
-                                               :job-execution/execution-id execution-id}])))
+                             (if execution-id
+                               (model/transact [{:db/id (:request-id execution-request)
+                                                 :job-execution/execution-id execution-id}])
+                               (model/transact [{:db/id (:request-id execution-request)
+                                                 :job-execution/batch-status :batch-status/abandoned}]))))
   (model/transact [{:db/id (:request-id execution-request)
                     :job-execution/agent [:agent/instance-id (:instance-id agt)]
                     :job-execution/batch-status :batch-status/starting}]))

@@ -9,6 +9,12 @@
 (defonce scheduler (atom nil))
 (defonce control-bus (atom {}))
 
+(defn- make-trigger [job-id cron-notation]
+  (.. (TriggerBuilder/newTrigger)
+      (withIdentity (str "trigger-" job-id))
+      (withSchedule (CronScheduleBuilder/cronSchedule cron-notation))
+      (build)))
+
 (defn start [host port]
   (swap! control-bus assoc :host host :port (int port))
   (reset! scheduler (.getScheduler (StdSchedulerFactory.)))
@@ -20,22 +26,35 @@
                          [?schedule :schedule/cron-notation ?cron-notation]]}))
 
 (defn schedule [job-id cron-notation]
-  (let [trigger (.. (TriggerBuilder/newTrigger)
-                    (withIdentity (str "trigger-" job-id))
-                    (withSchedule (CronScheduleBuilder/cronSchedule cron-notation))
-                    (build))
+  (let [new-trigger (make-trigger job-id cron-notation)
+        job (model/pull '[:job/id
+                          {:job/schedule
+                           [:db/id
+                            :schedule/cron-notation]}] job-id)
         job-detail (.. (JobBuilder/newJob)
                        (ofType JobStreamerExecuteJob)
-                       (withIdentity job-id)
-                       (usingJobData "job-id" job-id)
+                       (withIdentity (str "job-" job-id))
+                       (usingJobData "job-name" (:job/id job))
                        (usingJobData "host" (:host @control-bus))
                        (usingJobData "port" (:port @control-bus))
                        (build))]
-    (.scheduleJob @scheduler job-detail trigger)
-    (model/transact [{:db/id #db/id[db.part/user -1]
-                    :schedule/cron-notation cron-notation}
-                   {:db/id [:job/id job-id]
-                    :job/schedule #db/id[db.part/user -1]}])))
+    (if-let [trigger (.getTrigger @scheduler (TriggerKey. (str "trigger-" job-id)))]
+      (do
+        (.rescheduleJob @scheduler (.getKey trigger) new-trigger)
+        (model/transact [{:db/id (get-in job [:job/schedule :db/id])
+                          :schedule/cron-notation cron-notation}]))
+      (do
+        (.scheduleJob @scheduler job-detail new-trigger)
+        (model/transact [{:db/id #db/id[db.part/user -1]
+                          :schedule/cron-notation cron-notation}
+                         {:db/id job-id
+                          :job/schedule #db/id[db.part/user -1]}])))))
+
+(defn unschedule [job-id]
+  (let [job (model/pull '[{:job/schedule
+                           [:db/id]}] job-id)]
+    (.unscheduleJob @scheduler (TriggerKey. (str "trigger-" job-id)))
+    (model/transact [[:db.fn/retractEntity (get-in job [:job/schedule :db/id])]])))
 
 (defn fire-times [job-id]
   (let [trigger (.getTrigger @scheduler (TriggerKey. (str "trigger-" job-id)))]

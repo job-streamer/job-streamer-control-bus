@@ -27,5 +27,7 @@
   :ring {:handler job-streamer.control-bus.core/app
          :init    job-streamer.control-bus.core/init}
 
-  :profiles {:dev {:source-paths ["src-dev"]
-                   :aot [example.batchlet1]}})
+  :profiles {:dev {:source-paths ["src-dev/clj"]
+                   :java-source-paths ["src-dev/java"]
+                   :aot [example.batchlet1]
+                   :dependencies [[net.sf.supercsv/super-csv "2.2.1"]]}})

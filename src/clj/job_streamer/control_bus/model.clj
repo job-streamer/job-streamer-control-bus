@@ -31,15 +31,10 @@
            (fields
             [id :string  :indexed :unique-value :fulltext]
             [restartable :boolean]
-            [property :ref :many]
             [steps :ref :many]
             [edn-notation :string]
             [schedule :ref]
             [executions :ref :many]))
-   (schema property
-           (fields
-            [name  :string]
-            [value :string]))
    (schema step
            (fields
             [id :string :indexed]
@@ -89,6 +84,7 @@
             [exception :string]))
    (schema schedule
            (fields
+            [active? :boolean]
             [cron-notation :string]))])
 
 (defn generate-enums [tempid-fn & enums]
