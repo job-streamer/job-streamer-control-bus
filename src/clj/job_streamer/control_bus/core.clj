@@ -10,7 +10,7 @@
             [datomic.api :as d]
             (job-streamer.control-bus (model :as model)
                                       (job :as job)
-                                      (multicast :as multicast)
+                                      (broadcast :as broadcast)
                                       (server :as server)
                                       (scheduler :as scheduler)
                                       (dispatcher :as dispatcher)))
@@ -237,7 +237,7 @@
 
 (defn -main [& {:keys [port] :or {port 45102}}]
   (init)
-  (multicast/start port)
+  (broadcast/start port)
   (scheduler/start "localhost" port)
   (dispatcher/start)
   (go-loop []
