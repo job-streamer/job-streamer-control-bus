@@ -7,7 +7,7 @@
   </appender>
 
   <appender name="datomic" class="net.unit8.job_streamer.control_bus.DatomicAppender">
-    <uri>datomic:mem://job-streamer</uri>
+    <uri>datomic:free://localhost:4334/job-streamer</uri>
   </appender>
 
   <logger name="job-streamer.control_bus" level="debug"/>

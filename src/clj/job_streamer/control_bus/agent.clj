@@ -51,7 +51,6 @@
               (cond (and error on-error) (on-error error)
                     on-success (on-success (edn/read-string body))))))
 
-
 (defn find-agent-by-channel [ch]
   (first (filter #(= (:channel %) ch) @agents)))
 

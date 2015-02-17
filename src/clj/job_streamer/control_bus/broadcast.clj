@@ -25,29 +25,46 @@
             port (try (.readInt dis) (catch Exception e 0))]
         (if (= port 0)
           addresses
-          (recur (conj addresses (str (.getHostAddress (InetAddress/getByAddress ip-bytes)) ":" port))))))))
+          (recur (conj addresses {:host (InetAddress/getByAddress ip-bytes) :port port})))))))
 
-(defn- control-bus-address []
-  (loop [i 1, addresses []]
-    (if-let [interface (NetworkInterface/getByIndex i)]
-      (recur (inc i)
-             (concat addresses
-                     (->> (.getInterfaceAddresses interface) 
-                          (map #(.getAddress %))
-                          (filter #(and (instance? java.net.Inet4Address %)
-                                        (not (.isLoopbackAddress %)))))))
-      (first addresses))))
+(defn- available-addresses []
+  (flatten
+   (for [interface (enumeration-seq (NetworkInterface/getNetworkInterfaces))]
+    (->> (.getInterfaceAddresses interface) 
+         (map #(.getAddress %))
+         (filter #(and (instance? java.net.Inet4Address %)
+                       (not (.isLoopbackAddress %))))))))
+
+(defn- select-control-bus-url [agent-addr]
+  (let [segments (.getAddress (:host agent-addr))]
+    (loop [i 0, addrs (available-addresses)]
+      (let [matches (filter #(= (aget segments i)
+                                (aget (.getAddress %) i)) addrs)]
+        (cond (empty? matches) (or (first addrs) (InetAddress/getLocalHost)) 
+              (or (= (count matches) 1) (= i 3)) (first matches)
+              :default (recur (inc i) matches))))))
 
 (defn- do-receive [key ws-port]
   (let [channel (.channel key)
         buf (ByteBuffer/allocate 256)]
     (.receive channel buf)
     (.flip buf)
-    (let [agent-addresses (read-agent-addresses buf)]
-      (log/info "Find agent: " agent-addresses)
-      @(http/post (str "http://" (first agent-addresses) "/join-bus")
+    
+    (let [agent-address (first (read-agent-addresses buf))]
+      (log/info "Find agent: " agent-address)
+      (log/info "Send join request" (str "http://" (.getHostAddress (:host agent-address))
+                       ":" (:port agent-address) "/join-bus"))
+      (log/info "  :control-bus-url " (str "ws://" (.getHostAddress (select-control-bus-url agent-address))
+                        ":" ws-port "/join"))
+      (log/info "  :agent-host " (.getHostAddress (:host agent-address)))
+      @(http/post (str "http://" (.getHostAddress (:host agent-address))
+                       ":" (:port agent-address) "/join-bus")
                   {:form-params
-                   {:control-bus-url (str "ws://" (.getHostAddress (InetAddress/getLocalHost)) ":" ws-port "/join")}}))))
+                   {:control-bus-url (str "ws://" (.getHostAddress (select-control-bus-url agent-address))
+                                          ":" ws-port "/join")
+                    :agent-host (.getHostAddress (:host agent-address))}}
+                  (fn [{:keys [status headers error]}]
+                    (log/warn "join-request" status))))))
 
 (defn start [ws-port]
   (future

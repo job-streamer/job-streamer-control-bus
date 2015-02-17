@@ -15,16 +15,6 @@
       (withSchedule (CronScheduleBuilder/cronSchedule cron-notation))
       (build)))
 
-(defn start [host port]
-  (swap! control-bus assoc :host host :port (int port))
-  (reset! scheduler (.getScheduler (StdSchedulerFactory.)))
-  (.start @scheduler)
-  (log/info "started scheduler.")
-  (model/query '{:find [?job-id ?cron-notation]
-                 :where [[?job :job/schedule ?schedule]
-                         [?job :job/id ?job-id]
-                         [?schedule :schedule/cron-notation ?cron-notation]]}))
-
 (defn schedule [job-id cron-notation]
   (let [new-trigger (make-trigger job-id cron-notation)
         job (model/pull '[:job/id
@@ -62,6 +52,19 @@
 
 (defn validate-format [cron-notation]
   (CronExpression/validateExpression cron-notation))
+
+(defn start [host port]
+  (swap! control-bus assoc :host host :port (int port))
+  (reset! scheduler (.getScheduler (StdSchedulerFactory.)))
+  (.start @scheduler)
+  (log/info "started scheduler.")
+  (let [schedules (model/query '{:find [?job ?cron-notation]
+                                 :where [[?job :job/schedule ?schedule]
+                                         [?job :job/id ?job-id]
+                                         [?schedule :schedule/cron-notation ?cron-notation]]})]
+    (doseq [[job-id cron-notation] schedules]
+      (log/info "Recover schedule: " job-id cron-notation)
+      (schedule job-id cron-notation))))
 
 (defn stop []
   (.shutdown @scheduler)

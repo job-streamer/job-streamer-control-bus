@@ -8,13 +8,18 @@ import javax.batch.runtime.context.StepContext;
 import javax.inject.Inject;
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.net.URL;
+import java.net.URLConnection;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 
 /**
  * @author kawasima
  */
 public class ShellBatchlet extends AbstractBatchlet {
-    private static final Logger logger = LoggerFactory.getLogger(ShellBatchlet.class);
+    private static final Logger logger = LoggerFactory.getLogger("job-streamer");
 
     @Inject
     StepContext stepContext;
@@ -27,14 +32,21 @@ public class ShellBatchlet extends AbstractBatchlet {
             throw new IllegalStateException("script is null");
         }
 
-        File scriptFile = new File(script);
-        if (!scriptFile.exists()) {
-            logger.error("script [" + scriptFile + "] is not found");
-            throw new IllegalStateException("script is not found.");
+        URL resourceUrl = getClass().getClassLoader().getResource(script);
+        if (resourceUrl == null) {
+            logger.error("resource [" + script + "] is not found.");
+            throw new IllegalStateException("resource [" + script + "] is not found.");
         }
-        if (!scriptFile.canExecute()) {
-            logger.error("script [" + scriptFile + "] is not executable.");
-            throw new IllegalStateException("script is not executable.");
+
+        URLConnection connection = resourceUrl.openConnection();
+        try (InputStream in = connection.getInputStream()) {
+            File scriptFile = File.createTempFile(Paths.get(script).getFileName().toString(), "exe");
+            if (!scriptFile.exists()) {
+                logger.error("script [" + scriptFile + "] is not found");
+                throw new IllegalStateException("script is not found.");
+            }
+            Files.copy(in, scriptFile.toPath());
+            scriptFile.setExecutable(true);
         }
 
         ProcessBuilder pb = new ProcessBuilder(script);

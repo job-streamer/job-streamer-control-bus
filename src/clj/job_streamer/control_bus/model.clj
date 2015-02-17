@@ -1,9 +1,10 @@
 (ns job-streamer.control-bus.model
-  (:use [datomic-schema.schema :only [defpart defschema fields part schema]])
+  (:use [datomic-schema.schema :only [defpart defschema fields part schema]]
+        [environ.core :only [env]])
   (:require [datomic.api :as d]
             [datomic-schema.schema :as s]))
 
-(def uri "datomic:mem://job-streamer")
+(def uri (or (env :datomic-url "datomic:free://localhost:4334/job-streamer")))
 (defonce conn (atom nil))
 
 (defn query [q & params]
