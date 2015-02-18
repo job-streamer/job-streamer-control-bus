@@ -3,7 +3,8 @@
             [clojure.tools.logging :as log])
   (:import [net.unit8.job_streamer.control_bus JobStreamerExecuteJob]
            (org.quartz TriggerBuilder JobBuilder CronScheduleBuilder
-                       TriggerKey TriggerUtils CronExpression)
+                       TriggerKey TriggerUtils CronExpression
+                       Trigger$TriggerState)
            [org.quartz.impl StdSchedulerFactory]))
 
 (defonce scheduler (atom nil))
@@ -32,13 +33,31 @@
       (do
         (.rescheduleJob @scheduler (.getKey trigger) new-trigger)
         (model/transact [{:db/id (get-in job [:job/schedule :db/id])
-                          :schedule/cron-notation cron-notation}]))
+                          :schedule/cron-notation cron-notation
+                          :schedule/active? true}]))
       (do
         (.scheduleJob @scheduler job-detail new-trigger)
         (model/transact [{:db/id #db/id[db.part/user -1]
-                          :schedule/cron-notation cron-notation}
+                          :schedule/cron-notation cron-notation
+                          :schedule/active? true}
                          {:db/id job-id
                           :job/schedule #db/id[db.part/user -1]}])))))
+
+(defn pause [job-id]
+  (let [job (model/pull '[:job/id
+                          {:job/schedule
+                           [:db/id]}] job-id)]
+    (.pauseTrigger @scheduler (TriggerKey. (str "trigger-" job-id)))
+    (model/transact [{:db/id (get-in job [:job/schedule :db/id])
+                      :schedule/active? false}])))
+
+(defn resume [job-id]
+  (let [job (model/pull '[:job/id
+                          {:job/schedule
+                           [:db/id]}] job-id)]
+    (.resumeTrigger @scheduler (TriggerKey. (str "trigger-" job-id)))
+    (model/transact [{:db/id (get-in job [:job/schedule :db/id])
+                      :schedule/active? true}])))
 
 (defn unschedule [job-id]
   (let [job (model/pull '[{:job/schedule
@@ -47,8 +66,11 @@
     (model/transact [[:db.fn/retractEntity (get-in job [:job/schedule :db/id])]])))
 
 (defn fire-times [job-id]
-  (let [trigger (.getTrigger @scheduler (TriggerKey. (str "trigger-" job-id)))]
-    (TriggerUtils/computeFireTimes trigger nil 5)))
+  (let [trigger-key (TriggerKey. (str "trigger-" job-id))
+        trigger-state (.getTriggerState @scheduler trigger-key)
+        trigger (.getTrigger @scheduler trigger-key)]
+    (when (= trigger-state Trigger$TriggerState/NORMAL)
+      (TriggerUtils/computeFireTimes trigger nil 5))))
 
 (defn validate-format [cron-notation]
   (CronExpression/validateExpression cron-notation))

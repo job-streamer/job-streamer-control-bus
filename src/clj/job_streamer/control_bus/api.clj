@@ -47,7 +47,7 @@
    If a job isn't scheduled, it returns nil."
   [job]
   (when (:job/schedule job)
-    (let [next-start (first (scheduler/fire-times (:db/id job)))]
+    (if-let [next-start (first (scheduler/fire-times (:db/id job)))]
       {:job-execution/start-time next-start})))
 
 (defresource jobs-resource
@@ -85,7 +85,7 @@
                                          :job-execution/end-time
                                          {:job-execution/batch-status [:db/ident]}
                                          {:job-execution/agent [:agent/name]}]}
-                                       {:job/schedule [:schedule/cron-notation]}]
+                                       {:job/schedule [:schedule/cron-notation :schedule/active?]}]
                               (:job ctx))
                      total (count (:job/executions job))
                      success (->> (:job/executions job)
@@ -133,14 +133,18 @@
   :handle-ok (fn [ctx]
                (job/find-execution job-id id)))
 
-(defresource schedule-resource [job-id]
+(defresource schedule-resource [job-id & [cmd]]
   :available-media-types ["application/edn"]
-  :allowed-methods [:post :delete]
+  :allowed-methods [:post :put :delete]
   :malformed? #(parse-edn % ::data)
   :exists? (fn [ctx]
              (:job/schedule (model/pull '[:job/schedule] job-id)))
   :post! (fn [ctx]
            (scheduler/schedule job-id (get-in ctx [::data :schedule/cron-notation])))
+  :put! (fn [ctx]
+          (case cmd
+            :pause  (scheduler/pause job-id)
+            :resume (scheduler/resume job-id)))
   :delete! (fn [ctx]
              (scheduler/unschedule job-id))
   :handle-ok (fn [ctx])

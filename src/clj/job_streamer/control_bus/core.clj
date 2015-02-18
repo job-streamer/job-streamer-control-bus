@@ -92,6 +92,8 @@
   (ANY ["/job/:job-id/executions" :job-id #".*"] [job-id] (executions-resource job-id))
   (ANY ["/job/:job-name/schedule" :job-name #".*"] [job-name]
     (schedule-resource (job/find-by-id job-name)))
+  (ANY ["/job/:job-name/schedule/:cmd" :job-name #".*" :cmd #"\w+"] [job-name cmd]
+    (schedule-resource (job/find-by-id job-name) (keyword cmd)))
   (ANY ["/job/:job-id/execution/:id" :job-id #".*" :id #"\d+"]
       [job-id id]
     (execution-resource job-id (Long/parseLong id)))
@@ -114,6 +116,7 @@
                             :parameters parameter}))
       (<! (timeout 2000))
       (recur)))
+  (ag/start-monitor)
 
   (server/run-server
    (-> app-routes
