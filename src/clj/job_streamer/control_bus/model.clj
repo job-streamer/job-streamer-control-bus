@@ -24,9 +24,9 @@
 (defn dbschema []
   [(schema application
            (fields
-            [id :string :indexed :unique-value :fulltext]
+            [name :string :indexed :unique-value :fulltext]
             [description :string]
-            [classpath :string :many]
+            [classpaths :string :many]
             [jobs :ref :many]))
    (schema job
            (fields

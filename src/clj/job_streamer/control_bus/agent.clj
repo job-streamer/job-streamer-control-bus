@@ -76,9 +76,11 @@
                 {:as :text
                  :headers {"Content-Type" "application/edn"}}
                 (fn [{:keys [status headers body error]}]
-                  (let [spec (edn/read-string body)]
-                    (dosync
-                     (alter agents disj agt)
-                     (alter agents conj (merge agt spec)))))))
+                  (when-not error
+                    (let [spec (edn/read-string body)]
+                      (dosync
+                       (log/debug "AgentMonitor" @agents)
+                       (alter agents disj agt)
+                       (alter agents conj (merge agt spec))))))))
     (<! (timeout 60000))
     (recur)))

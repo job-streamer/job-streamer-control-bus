@@ -7,6 +7,7 @@
             [ring.middleware.reload :refer [wrap-reload]]
             (job-streamer.control-bus (model :as model)
                                       (job :as job)
+                                      (apps :as apps)
                                       (agent :as ag)
                                       (broadcast :as broadcast)
                                       (server :as server)
@@ -16,7 +17,7 @@
         [liberator.representation :only [ring-response]]
         [job-streamer.control-bus.api :only [jobs-resource job-resource
                                              executions-resource execution-resource
-                                             schedule-resource]]
+                                             schedule-resource applications-resource]]
         [ring.util.response :only [header]]))
 
 (defonce config (atom {}))
@@ -99,7 +100,7 @@
     (execution-resource job-id (Long/parseLong id)))
   (ANY "/job/:id"  [id] (job-resource id))
   (ANY "/agents" [] ag/agents-resource)
-  (ANY "/deploy" [] )
+  (ANY "/apps" [] applications-resource)
   ;; For debug
   (GET "/logs" [] (pr-str (model/query '{:find [[(pull ?log [*]) ...]] :where [[?log :execution-log/level]]}))))
 
@@ -112,6 +113,7 @@
     (let [jobs (job/find-undispatched)]
       (doseq [[execution-request job parameter] jobs]
         (dispatcher/submit {:request-id execution-request
+                            :class-loader-id (:id (apps/find-by-name "default"))
                             :job job
                             :parameters parameter}))
       (<! (timeout 2000))

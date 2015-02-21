@@ -1,13 +1,13 @@
 (ns job-streamer.control-bus.dispatcher
-  (:require [clojure.tools.logging :as log])
-  (:use [clojure.core.async :only [chan put! <! go-loop timeout]]
-        (job-streamer.control-bus (agent :as ag)
-                                  (model :as model))))
+  (:use [clojure.core.async :only [chan put! <! go-loop timeout]])
+  (:require [clojure.tools.logging :as log]
+            (job-streamer.control-bus (agent :as ag)
+                                      (model :as model))))
 
 (def dispatcher-ch (chan))
 
 (defn- dispatch [agt execution-request]
-  (execute-job agt execution-request
+  (ag/execute-job agt execution-request
                :on-error (fn [e]
                            (log/error "failure submit job [" (get-in execution-request [:job :job/id])
                                       "] at host [" (:host agt) "]" e)
@@ -36,5 +36,5 @@
             (if (= (mod log-interval 10) 0)
               (log/info "No available agents for " execution-request))
             (<! (timeout 3000))
-            (recur (find-agent) (inc log-interval)))))
+            (recur (ag/find-agent) (inc log-interval)))))
       (recur))))

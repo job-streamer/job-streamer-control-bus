@@ -6,7 +6,33 @@ The JobStreamer control bus is a message passing system to agents.
 
 You can operate the JobStreamer control bus via web API. It's format is EDN that is popular in clojure.
 
-### List jobs  
+
+### Create a appliccation
+
+```
+POST /apps
+```
+
+#### Example
+
+```clojure
+{
+  :name "batch-example"
+  :description "Batch example"
+  :classpath [
+    "file:///home/app/target/classes"
+    "file:///var/m2/repository/xxx/xxx.jar"
+    "file:///var/m2/repository/yyy/yyy.jar"
+    "file:///var/m2/repository/zzz/zzz.jar"
+  ]
+}
+```
+
+`NOTICE`
+
+> Currently, JobStreamer supports only single application.
+
+### List jobs
 
 ```java
 GET /jobs

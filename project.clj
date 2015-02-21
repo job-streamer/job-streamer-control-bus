@@ -4,6 +4,7 @@
                  [org.clojure/core.async "0.1.346.0-17112a-alpha"]
                  [javax/javaee-api "7.0"]
                  [environ "1.0.0"]
+                 [bouncer "0.3.2"]
                  [net.unit8.wscl/websocket-classloader "0.2.0"]
                  [net.unit8.logback/logback-websocket-appender "0.1.0"]
                  [io.undertow/undertow-websockets-jsr "1.1.1.Final"]

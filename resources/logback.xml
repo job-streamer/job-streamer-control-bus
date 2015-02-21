@@ -10,6 +10,7 @@
     <uri>datomic:free://localhost:4334/job-streamer</uri>
   </appender>
 
+  <logger name="datomic" level="warn"/>
   <logger name="job-streamer.control_bus" level="debug"/>
   <logger name="net.unit8" level="debug"/>
 

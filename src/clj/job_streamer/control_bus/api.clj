@@ -5,13 +5,17 @@
             [clojure.tools.logging :as log]
             [liberator.core :refer [defresource]]
             [datomic.api :as d]
+            [bouncer.core :as b]
+            [bouncer.validators :as v]
             (job-streamer.control-bus (model :as model)
+                                      (apps :as apps)
                                       (job :as job)
                                       (broadcast :as broadcast)
                                       (server :as server)
                                       (scheduler :as scheduler)
                                       (dispatcher :as dispatcher)))
   (:use [clojure.core.async :only [chan put! <! go-loop timeout]]
+        [clojure.walk]
         [liberator.representation :only [ring-response]]
         [job-streamer.control-bus.agent :only [find-agent execute-job] :as ag]
         [ring.util.response :only [header]]))
@@ -31,7 +35,7 @@
         false)
       (catch Exception e
         (log/error "fail to parse edn." e)
-        (:message (format "IOException: %s" (.getMessage e)))))))
+        {:message (format "IOException: %s" (.getMessage e))}))))
 
 (defn find-latest-execution
   "Find latest from given executions."
@@ -77,6 +81,7 @@
   :put! (fn [{job ::data job-id :job}]
           (model/transact (job/edn->datoms job job-id)))
   :delete! (fn [{job-id :job}]
+             (scheduler/unschedule job-id)
              (model/transact [[:db.fn/retractEntity job-id]]))
   :handle-ok (fn [ctx]
                (let [job (model/pull '[:*
@@ -152,10 +157,36 @@
                       (ring-response {:status 500
                                       :body (pr-str {:message (.getMessage ex)})})))
 
-(defresource application-resource [app-id]
+(defresource applications-resource [app-id]
   :available-media-types ["application/edn"]
-  :allowed-methods [:post]
-  :malformed? #(parse-edn % ::data)
-  :post! (fn [ctx]
-           )
-  :handle-ok (fn [ctx]))
+  :allowed-methods [:get :post]
+  :malformed? (fn [ctx]
+                (when-let [res (parse-edn ctx ::data)]
+                  (if (sequential? res)
+                    (if-let [data (::data (second res))] 
+                      (if-let [errors (first
+                                       (b/validate data
+                                                   :name v/required
+                                                   :description v/required
+                                                   :classpaths v/required))]
+                        {:message (->> errors
+                                       (postwalk #(if (map? %) (vals %) %))
+                                       flatten
+                                       first)}
+                        res)
+                      res)
+                    res))) 
+  :post! (fn [{app ::data}]
+           (if-let [app-id (model/query '[:find ?e . :in $ ?n :where [?e :application/name ?n]] "default")] 
+             (model/transact [{:db/id app-id
+                               :application/description (:description app)
+                               :application/classpaths (:classpaths app)}])
+             (model/transact [{:db/id #db/id[db.part/user -1]
+                             :application/name "default" ;; Todo multi applications.
+                             :application/description (:description app)
+                             :application/classpaths (:classpaths app)}]))
+           
+           (apps/register (assoc app :name "default")))
+  :handle-ok (fn [ctx]
+               (vals @apps/applications)))
+
