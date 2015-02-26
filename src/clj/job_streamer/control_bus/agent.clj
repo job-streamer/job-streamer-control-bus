@@ -56,8 +56,12 @@
             {:as :text
              :headers {"Content-Type" "application/edn"}}
             (fn [{:keys [status headers body error]}]
-              (cond (and error on-error) (on-error error)
+              (cond (and error on-error)
+                    (on-error error)
                     on-success (on-success (edn/read-string body))))))
+
+(defn available-agents []
+  @agents)
 
 (defn find-agent-by-channel [ch]
   (first (filter #(= (:channel %) ch) @agents)))
@@ -79,7 +83,7 @@
                   (when-not error
                     (let [spec (edn/read-string body)]
                       (dosync
-                       (log/debug "AgentMonitor" @agents)
+                       (log/info "AgentMonitor" @agents)
                        (alter agents disj agt)
                        (alter agents conj (merge agt spec))))))))
     (<! (timeout 60000))

@@ -82,7 +82,6 @@
   (log/info "started scheduler.")
   (let [schedules (model/query '{:find [?job ?cron-notation]
                                  :where [[?job :job/schedule ?schedule]
-                                         [?job :job/id ?job-id]
                                          [?schedule :schedule/cron-notation ?cron-notation]]})]
     (doseq [[job-id cron-notation] schedules]
       (log/info "Recover schedule: " job-id cron-notation)

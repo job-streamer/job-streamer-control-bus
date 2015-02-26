@@ -13,11 +13,9 @@
                                       (server :as server)
                                       (scheduler :as scheduler)
                                       (dispatcher :as dispatcher)))
-  (:use [clojure.core.async :only [chan put! <! go-loop timeout]]
+  (:use [clojure.core.async :only [chan put! <! go go-loop timeout]]
         [liberator.representation :only [ring-response]]
-        [job-streamer.control-bus.api :only [jobs-resource job-resource
-                                             executions-resource execution-resource
-                                             schedule-resource applications-resource]]
+        [job-streamer.control-bus.api]
         [ring.util.response :only [header]]))
 
 (defonce config (atom {}))
@@ -50,7 +48,7 @@
                                :in [$ ?id ?step-name]
                                :where [[?job :job/executions ?id]
                                        [?job :job/steps ?step]
-                                       [?step :step/id ?step-name]]}
+                                       [?step :step/name ?step-name]]}
                              id step-name)]
     (model/transact [{:db/id #db/id[db.part/user -1]
                       :step-execution/step step
@@ -89,31 +87,45 @@
         (header resp "Access-Control-Allow-Origin" "*")))))
 
 (defroutes app-routes
-  (ANY "/jobs" [] jobs-resource)
-  (ANY ["/job/:job-id/executions" :job-id #".*"] [job-id] (executions-resource job-id))
-  (ANY ["/job/:job-name/schedule" :job-name #".*"] [job-name]
-    (schedule-resource (job/find-by-id job-name)))
-  (ANY ["/job/:job-name/schedule/:cmd" :job-name #".*" :cmd #"\w+"] [job-name cmd]
-    (schedule-resource (job/find-by-id job-name) (keyword cmd)))
-  (ANY ["/job/:job-id/execution/:id" :job-id #".*" :id #"\d+"]
-      [job-id id]
-    (execution-resource job-id (Long/parseLong id)))
-  (ANY "/job/:id"  [id] (job-resource id))
+  (ANY "/:app-name/jobs" [app-name] (jobs-resource app-name) )
+  (ANY ["/:app-name/job/:job-name/executions" :app-name #".*" :job-name #".*"]
+      [app-name job-name]
+    (executions-resource app-name job-name))
+  (ANY ["/:app-name/job/:job-name/schedule" :app-name #".*" :job-name #".*"]
+      [app-name job-name]
+    (schedule-resource (job/find-by-name app-name job-name)))
+  (ANY ["/:app-name/job/:job-name/schedule/:cmd" :app-name #".*" :job-name #".*" :cmd #"\w+"]
+      [app-name job-name cmd]
+    (schedule-resource (job/find-by-name app-name job-name) (keyword cmd)))
+  (ANY ["/:app-name/job/:job-name/execution/:id" :app-name #".*" :job-name #".*" :id #"\d+"]
+      [app-name job-name id]
+    (execution-resource (Long/parseLong id)))
+  (ANY ["/:app-name/job/:job-name" :app-name #".*" :job-name #".*"]
+      [app-name job-name] (job-resource job-name))
+  (ANY "/:app-name/stats" [app-name]
+    (stats-resource app-name))
   (ANY "/agents" [] ag/agents-resource)
   (ANY "/apps" [] applications-resource)
   ;; For debug
-  (GET "/logs" [] (pr-str (model/query '{:find [[(pull ?log [*]) ...]] :where [[?log :execution-log/level]]}))))
+  (GET "/logs" [] (pr-str (model/query '{:find [[(pull ?log [*]) ...]] :where [[?log :execution-log/level]]})))
+  (route/not-found {:content-type "application/edn"
+                    :body "{:message \"not found\"}"}))
 
 (defn -main [& {:keys [port] :or {port 45102}}]
   (init)
   (broadcast/start port)
-  (scheduler/start "localhost" port)
+  (go (scheduler/start "localhost" port)) 
   (dispatcher/start)
+  (go
+    (let [applications (model/query '{:find [[(pull ?app [*])]]
+                                      :where [[?app :application/name]]})]
+      (doseq [app applications]
+        (apps/register (assoc app :name "default")))))
   (go-loop []
     (let [jobs (job/find-undispatched)]
       (doseq [[execution-request job parameter] jobs]
         (dispatcher/submit {:request-id execution-request
-                            :class-loader-id (:id (apps/find-by-name "default"))
+                            :class-loader-id (:application/class-loader-id (apps/find-by-name "default"))
                             :job job
                             :parameters parameter}))
       (<! (timeout 2000))

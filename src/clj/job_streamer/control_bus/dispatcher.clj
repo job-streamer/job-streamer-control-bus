@@ -9,7 +9,7 @@
 (defn- dispatch [agt execution-request]
   (ag/execute-job agt execution-request
                :on-error (fn [e]
-                           (log/error "failure submit job [" (get-in execution-request [:job :job/id])
+                           (log/error "failure submit job [" (get-in execution-request [:job :job/name])
                                       "] at host [" (:host agt) "]" e)
                            (put! dispatcher-ch execution-request))
                :on-success (fn [{:keys [execution-id]}]

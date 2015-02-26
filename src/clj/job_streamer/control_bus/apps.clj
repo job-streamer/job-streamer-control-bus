@@ -1,4 +1,5 @@
 (ns job-streamer.control-bus.apps
+  (:require [clojure.tools.logging :as log])
   (:import [java.net URL]
            [net.unit8.wscl ClassLoaderHolder]))
 
@@ -10,9 +11,13 @@
   (let [id (.registerClasspath
             (ClassLoaderHolder/getInstance)
             (into-array URL
-                        (map #(URL. %) (:classpaths app)))
+                        (map #(URL. %) (:application/classpaths app)))
             (.getClassLoader (class tracer-bullet-fn)))]
-    (swap! applications assoc (:name app) (assoc app :id id))))
+    (swap! applications
+           assoc
+           (:application/name app)
+           (assoc app :application/class-loader-id id))
+    (log/info "Registered an application [" app "]")))
 
 (defn find-by-name [name]
   (get @applications name))

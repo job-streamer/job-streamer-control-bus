@@ -51,12 +51,12 @@
     (.flip buf)
     
     (let [agent-address (first (read-agent-addresses buf))]
-      (log/info "Find agent: " agent-address)
-      (log/info "Send join request" (str "http://" (.getHostAddress (:host agent-address))
+      (log/debug "Find agent: " agent-address)
+      (log/debug "Send join request" (str "http://" (.getHostAddress (:host agent-address))
                        ":" (:port agent-address) "/join-bus"))
-      (log/info "  :control-bus-url " (str "ws://" (.getHostAddress (select-control-bus-url agent-address))
+      (log/debug "  :control-bus-url " (str "ws://" (.getHostAddress (select-control-bus-url agent-address))
                         ":" ws-port "/join"))
-      (log/info "  :agent-host " (.getHostAddress (:host agent-address)))
+      (log/debug "  :agent-host " (.getHostAddress (:host agent-address)))
       @(http/post (str "http://" (.getHostAddress (:host agent-address))
                        ":" (:port agent-address) "/join-bus")
                   {:form-params

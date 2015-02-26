@@ -30,17 +30,17 @@
             [jobs :ref :many]))
    (schema job
            (fields
-            [id :string  :indexed :unique-value :fulltext]
-            [restartable :boolean]
+            [name :string  :indexed :fulltext]
+            [restartable? :boolean]
             [steps :ref :many]
             [edn-notation :string]
             [schedule :ref]
             [executions :ref :many]))
    (schema step
            (fields
-            [id :string :indexed]
+            [name :string :indexed]
             [start-limit :long]
-            [allow-start-if-complete :boolean]
+            [allow-start-if-complete? :boolean]
             [chunk :ref]
             [batchlet :ref]))
    (schema chunk

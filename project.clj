@@ -18,7 +18,10 @@
                  [ch.qos.logback/logback-classic "1.1.2"]
 
                  ;; for Scheduler
-                 [org.quartz-scheduler/quartz "2.2.1"]]
+                 [org.quartz-scheduler/quartz "2.2.1"]
+
+                 ;; for monitoring agents
+                 [org.rrd4j/rrd4j "2.2"]]
 
   :source-paths ["src/clj"]
   :java-source-paths ["src/java"]
@@ -26,9 +29,4 @@
   :plugins [[lein-ring "0.8.13"]]
   :main job-streamer.control-bus.core
   :ring {:handler job-streamer.control-bus.core/app
-         :init    job-streamer.control-bus.core/init}
-
-  :profiles {:dev {:source-paths ["src-dev/clj"]
-                   :java-source-paths ["src-dev/java"]
-                   :aot [example.batchlet1]
-                   :dependencies [[net.sf.supercsv/super-csv "2.2.1"]]}})
+         :init    job-streamer.control-bus.core/init})
