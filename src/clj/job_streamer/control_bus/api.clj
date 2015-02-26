@@ -107,7 +107,7 @@
                                          {:job-execution/batch-status [:db/ident]}
                                          {:job-execution/agent [:agent/name]}]}
                                        {:job/schedule [:schedule/cron-notation :schedule/active?]}]
-                              (:job ctx))
+                              (:job-id ctx))
                      total (count (:job/executions job))
                      success (->> (:job/executions job)
                                   (filter #(= (get-in % [:job-execution/batch-status :db/ident]) 

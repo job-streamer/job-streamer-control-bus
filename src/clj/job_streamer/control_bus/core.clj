@@ -101,7 +101,7 @@
       [app-name job-name id]
     (execution-resource (Long/parseLong id)))
   (ANY ["/:app-name/job/:job-name" :app-name #".*" :job-name #".*"]
-      [app-name job-name] (job-resource job-name))
+      [app-name job-name] (job-resource app-name job-name))
   (ANY "/:app-name/stats" [app-name]
     (stats-resource app-name))
   (ANY "/agents" [] ag/agents-resource)
