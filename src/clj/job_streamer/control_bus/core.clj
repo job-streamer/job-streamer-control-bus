@@ -93,10 +93,13 @@
     (executions-resource app-name job-name))
   (ANY ["/:app-name/job/:job-name/schedule" :app-name #".*" :job-name #".*"]
       [app-name job-name]
+    (let [[_ job-id] (job/find-by-name app-name job-name)]
+      (schedule-resource job-id))
     (schedule-resource (job/find-by-name app-name job-name)))
   (ANY ["/:app-name/job/:job-name/schedule/:cmd" :app-name #".*" :job-name #".*" :cmd #"\w+"]
       [app-name job-name cmd]
-    (schedule-resource (job/find-by-name app-name job-name) (keyword cmd)))
+    (let [[_ job-id] (job/find-by-name app-name job-name)]
+      (schedule-resource job-id (keyword cmd))))
   (ANY ["/:app-name/job/:job-name/execution/:id" :app-name #".*" :job-name #".*" :id #"\d+"]
       [app-name job-name id]
     (execution-resource (Long/parseLong id)))
@@ -105,6 +108,10 @@
   (ANY "/:app-name/stats" [app-name]
     (stats-resource app-name))
   (ANY "/agents" [] ag/agents-resource)
+  (ANY "/agent/:instance-id" [instance-id]
+    (ag/agent-resource instance-id))
+  (ANY "/agent/:instance-id/monitor/:type/:cycle" [instance-id type cycle]
+    (ag/agent-monitor-resource instance-id type cycle))
   (ANY "/apps" [] applications-resource)
   ;; For debug
   (GET "/logs" [] (pr-str (model/query '{:find [[(pull ?log [*]) ...]] :where [[?log :execution-log/level]]})))

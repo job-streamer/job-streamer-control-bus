@@ -25,7 +25,8 @@
             port (try (.readInt dis) (catch Exception e 0))]
         (if (= port 0)
           addresses
-          (recur (conj addresses {:host (InetAddress/getByAddress ip-bytes) :port port})))))))
+          (recur (conj addresses {:host (InetAddress/getByAddress ip-bytes)
+                                  :port port})))))))
 
 (defn- available-addresses []
   (flatten

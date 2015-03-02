@@ -19,7 +19,7 @@
                                (model/transact [{:db/id (:request-id execution-request)
                                                  :job-execution/batch-status :batch-status/abandoned}]))))
   (model/transact [{:db/id (:request-id execution-request)
-                    :job-execution/agent [:agent/instance-id (:instance-id agt)]
+                    :job-execution/agent [:agent/instance-id (:agent/instance-id agt)]
                     :job-execution/batch-status :batch-status/starting}]))
 
 (defn submit [execution-request]

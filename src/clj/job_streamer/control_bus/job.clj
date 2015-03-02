@@ -79,7 +79,7 @@
                                                           [?log :execution-log/agent ?agent]
                                                           [?agent :agent/instance-id ?instance-id]]}
                                                 (:step-execution/step-execution-id step-execution)
-                                                (get-in je [:job-execution/agent :agent/instance-id]))
+                                                (get-in je [:job-execution/agent :agent/instance-id] ""))
                                    (sort (fn [l1 l2]
                                            (compare (:execution-log/date l1)
                                                     (:execution-log/date l2))))))) %))))
