@@ -28,6 +28,14 @@
             [description :string]
             [classpaths :string :many]
             [jobs :ref :many]))
+   (schema batch-component
+           (fields
+            [application :ref]
+            [batchlet :string :many]
+            [item-reader :string :many]
+            [item-writer :string :many]
+            [item-processor :string :many]
+            [throwable :string :many]))
    (schema job
            (fields
             [name :string  :indexed :fulltext]

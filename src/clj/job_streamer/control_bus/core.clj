@@ -103,6 +103,9 @@
   (ANY ["/:app-name/job/:job-name/execution/:id" :app-name #".*" :job-name #".*" :id #"\d+"]
       [app-name job-name id]
     (execution-resource (Long/parseLong id)))
+  (ANY ["/:app-name/job/:job-name/execution/:id/:cmd" :app-name #".*" :job-name #".*" :id #"\d+" :cmd #"\w+"]
+      [app-name job-name id cmd]
+    (execution-resource (Long/parseLong id) (keyword cmd)))
   (ANY ["/:app-name/job/:job-name" :app-name #".*" :job-name #".*"]
       [app-name job-name] (job-resource app-name job-name))
   (ANY "/:app-name/stats" [app-name]
@@ -113,6 +116,9 @@
   (ANY "/agent/:instance-id/monitor/:type/:cycle" [instance-id type cycle]
     (ag/agent-monitor-resource instance-id type cycle))
   (ANY "/apps" [] applications-resource)
+  (ANY ["/:app-name/batch-components" :app-name #".*"]
+      [app-name]
+    (batch-components-resource app-name))
   ;; For debug
   (GET "/logs" [] (pr-str (model/query '{:find [[(pull ?log [*]) ...]] :where [[?log :execution-log/level]]})))
   (route/not-found {:content-type "application/edn"

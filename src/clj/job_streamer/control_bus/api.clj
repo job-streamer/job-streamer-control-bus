@@ -148,9 +148,13 @@
   :handle-ok (fn [ctx]
                (job/find-executions app-name job-name)))
 
-(defresource execution-resource [id]
+(defresource execution-resource [id & [cmd]]
   :available-media-types ["application/edn"]
-  :allowed-methods [:get]
+  :allowed-methods [:get :put]
+  :put! (fn [ctx]
+          (model/transact [{:db/id id
+                            :job-execution/batch-status :batch-status/stopped
+                            :job-execution/end-time (java.util.Date.)}]))
   :handle-ok (fn [ctx]
                (job/find-execution id)))
 
@@ -189,7 +193,20 @@
                              :application/name "default" ;; Todo multi applications.
                              :application/description (:application/description app)
                              :application/classpaths (:application/classpaths app)}]))
-           (apps/register (assoc app :name "default")))
+           (apps/register (assoc app :name "default"))
+           (when-let [components (apps/scan-components (:application/classpaths app))]
+             (model/transact [(merge {:db/id #db/id[db.part/user]
+                                      :batch-component/application [:application/name "default"]}
+                                     components)])))
   :handle-ok (fn [ctx]
                (vals @apps/applications)))
 
+(defresource batch-components-resource [app-name]
+  :available-media-types ["application/edn"]
+  :allowed-methods [:get]
+  :handle-ok (fn [ctx]
+               (->> (model/query '{:find [?c .]
+                                 :in [$ ?app-name]
+                                 :where [[?c :batch-component/application ?app]
+                                         [?app :application/name ?app-name]]} app-name)
+                    (model/pull '[:*]))))

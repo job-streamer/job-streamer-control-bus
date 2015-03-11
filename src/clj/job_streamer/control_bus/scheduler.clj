@@ -63,7 +63,8 @@
   (let [job (model/pull '[{:job/schedule
                            [:db/id]}] job-id)]
     (.unscheduleJob @scheduler (TriggerKey. (str "trigger-" job-id)))
-    (model/transact [[:db.fn/retractEntity (get-in job [:job/schedule :db/id])]])))
+    (when-let [schedule (get-in job [:job/schedule :db/id])]
+      (model/transact [[:db.fn/retractEntity schedule]]))))
 
 (defn fire-times [job-id]
   (let [trigger-key (TriggerKey. (str "trigger-" job-id))
