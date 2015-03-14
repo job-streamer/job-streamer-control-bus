@@ -5,7 +5,7 @@
                  [javax/javaee-api "7.0"]
                  [environ "1.0.0"]
                  [bouncer "0.3.2"]
-                 [net.unit8.wscl/websocket-classloader "0.2.0"]
+                 [net.unit8.wscl/websocket-classloader "0.2.1"]
                  [net.unit8.logback/logback-websocket-appender "0.1.0"]
                  [io.undertow/undertow-websockets-jsr "1.1.1.Final"]
                  [com.datomic/datomic-free "0.9.5130" :exclusions [org.slf4j/slf4j-api org.slf4j/slf4j-nop] ]

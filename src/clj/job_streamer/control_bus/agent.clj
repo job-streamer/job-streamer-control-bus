@@ -108,7 +108,7 @@
                   (when-not error
                     (let [spec (edn/read-string body)]
                       (dosync
-                       (log/info "AgentMonitor" @agents)
+                       (log/debug "AgentMonitor" @agents)
                        (alter agents disj agt)
                        (alter agents conj (merge agt spec))
                        (rrd/update agt)))))))
