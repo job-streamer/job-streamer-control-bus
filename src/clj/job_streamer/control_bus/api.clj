@@ -18,7 +18,8 @@
         [liberator.representation :only [ring-response]]
         [ring.util.response :only [header]]
         (job-streamer.control-bus (agent :only [find-agent execute-job available-agents] :as ag)
-                                  (validation :only [validate]))))
+                                  (validation :only [validate])))
+  (:import [java.util Date]))
 
 (defn- body-as-string [ctx]
   (if-let [body (get-in ctx [:request :body])]
@@ -54,6 +55,16 @@
     (if-let [next-start (first (scheduler/fire-times (:db/id job)))]
       {:job-execution/start-time next-start})))
 
+(defn- append-schedule [job-id executions schedule]
+  (if (:schedule/active? schedule)
+    (let [schedules (scheduler/fire-times job-id)]
+      (apply conj executions
+             (map (fn [sch]
+                    {:job-execution/start-time sch
+                     :job-execution/end-time (Date. (+ (.getTime sch) (* 5 60 1000)))
+                     :job-execution/batch-status {:db/ident :batch-status/registered}}) schedules)))
+    executions))
+
 (defresource stats-resource [app-name]
     :available-media-types ["application/edn"]
     :allowed-methods [:get]
@@ -64,6 +75,7 @@
                                          :where [[?app :application/name ?app-name]
                                                  [?app :application/jobs ?job]]}
                                        app-name)}))
+
 (defresource jobs-resource [app-name]
   :available-media-types ["application/edn"]
   :allowed-methods [:get :post]
@@ -81,7 +93,7 @@
                                  executions :job/executions
                                  schedule :job/schedule :as job}]
                              {:job/name job-name
-                              :job/executions executions
+                              :job/executions (append-schedule (:db/id job) executions schedule)
                               :job/latest-execution (find-latest-execution executions)
                               :job/next-execution   (find-next-execution job)})
                            (job/find-all app-name query))))))

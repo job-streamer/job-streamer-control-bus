@@ -32,7 +32,7 @@
                                       :job-execution/end-time
                                       {:job-execution/batch-status [:db/ident]}]}
                                     {:job/schedule
-                                     [:db/id :schedule/cron-notation]}]) ...]]
+                                     [:db/id :schedule/cron-notation :schedule/active?]}]) ...]]
                      :in [$ ?app-name ?query]
                      :where [[?app :application/name ?app-name]
                              [?app :application/jobs ?job]]}]
@@ -94,7 +94,9 @@
              [?step-execution :step-execution/step-execution-id ?step-execution-id]]}
    instance-id step-execution-id))
 
-(defn edn->datoms [job job-id]
+(defn edn->datoms
+  "Convert a format from EDN to datom."
+  [job job-id]
   (let [datoms (atom [])
         step-refs (doall
                    (for [step (:job/steps job)]

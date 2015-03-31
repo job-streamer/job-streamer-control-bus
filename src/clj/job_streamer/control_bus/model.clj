@@ -1,5 +1,5 @@
 (ns job-streamer.control-bus.model
-  (:use [datomic-schema.schema :only [defpart defschema fields part schema]]
+  (:use [datomic-schema.schema :only [fields part schema]]
         [environ.core :only [env]])
   (:require [datomic.api :as d]
             [datomic-schema.schema :as s]))
@@ -96,19 +96,18 @@
             [active? :boolean]
             [cron-notation :string]))])
 
-(defn generate-enums [tempid-fn & enums]
+(defn generate-enums [& enums]
   (apply concat
-         (map #(s/get-enums tempid-fn (name (first %)) :db.part/user (second %)) enums)))
+         (map #(s/get-enums (name (first %)) :db.part/user (second %)) enums)))
 
 (defn create-schema []
   (d/create-database uri)
   (reset! conn (d/connect uri))
   (let [schema (concat
-                (s/generate-parts d/tempid (dbparts))
-                (generate-enums d/tempid
-                                [:batch-status [:registered :abandoned :completed :failed :started :starting :stopped :stopping :unknown]]
+                (s/generate-parts (dbparts))
+                (generate-enums [:batch-status [:registered :abandoned :completed :failed :started :starting :stopped :stopping :unknown]]
                                 [:log-level [:trace :debug :info :warn :error]])
-                (s/generate-schema d/tempid (dbschema)))]
+                (s/generate-schema (dbschema)))]
     (d/transact
      @conn
      schema)))

@@ -94,8 +94,7 @@
   (ANY ["/:app-name/job/:job-name/schedule" :app-name #".*" :job-name #".*"]
       [app-name job-name]
     (let [[_ job-id] (job/find-by-name app-name job-name)]
-      (schedule-resource job-id))
-    (schedule-resource (job/find-by-name app-name job-name)))
+      (schedule-resource job-id)))
   (ANY ["/:app-name/job/:job-name/schedule/:cmd" :app-name #".*" :job-name #".*" :cmd #"\w+"]
       [app-name job-name cmd]
     (let [[_ job-id] (job/find-by-name app-name job-name)]
