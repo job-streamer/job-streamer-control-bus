@@ -15,15 +15,17 @@
                :on-success (fn [{:keys [execution-id]}]
                              (if execution-id
                                (model/transact [{:db/id (:request-id execution-request)
-                                                 :job-execution/execution-id execution-id}])
+                                                 :job-execution/execution-id execution-id
+                                                 :job-execution/agent [:agent/instance-id (:agent/instance-id agt)]
+                                                 :job-execution/batch-status :batch-status/starting}])
                                (model/transact [{:db/id (:request-id execution-request)
-                                                 :job-execution/batch-status :batch-status/abandoned}]))))
-  (model/transact [{:db/id (:request-id execution-request)
-                    :job-execution/agent [:agent/instance-id (:agent/instance-id agt)]
-                    :job-execution/batch-status :batch-status/starting}]))
+                                                 :job-execution/agent [:agent/instance-id (:agent/instance-id agt)]
+                                                 :job-execution/batch-status :batch-status/abandoned}])))))
 
 (defn submit [execution-request]
-  (put! dispatcher-ch execution-request))
+  (put! dispatcher-ch execution-request)
+  (model/transact [{:db/id (:request-id execution-request)
+                    :job-execution/batch-status :batch-status/queued}]))
 
 (defn start []
   (go-loop []

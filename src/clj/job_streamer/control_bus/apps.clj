@@ -25,16 +25,17 @@
 
 (defn scan-components [classpaths]
   (when-let [java-cmd (some-> (System/getProperty "java.home") (str "/bin/java"))]
-    (log/debug "Scan batch components...")
-    (let [this-cps (.. (Thread/currentThread) getContextClassLoader getURLs) 
-          proc (.exec (Runtime/getRuntime)
-                      (into-array (concat [java-cmd
+    (log/info "Scan batch components...")
+    (let [this-cps (.. (Thread/currentThread) getContextClassLoader getURLs)
+          cmd (into-array (concat [java-cmd
                                            "-cp"
                                            (->> (vec this-cps)
                                                (map str)
                                                (clojure.string/join ":"))
                                            "net.unit8.job_streamer.control_bus.BatchComponentScanner"]
-                                          classpaths)))]
+                                          classpaths))
+          proc (.exec (Runtime/getRuntime) cmd)]
+      (log/info (clojure.string/join " " cmd))
       (with-open [rdr (io/reader (.getInputStream proc))]
         (->> (line-seq rdr)
              (map #(clojure.string/split % #":" 2))

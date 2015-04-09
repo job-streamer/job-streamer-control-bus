@@ -21,10 +21,12 @@ public class JobStreamerExecuteJob implements Job {
         String jobName = data.getString("job-name");
         String host = data.getString("host");
         int port = data.getInt("port");
+        String appName = data.getString("app-name");
 
         URLConnection conn;
         try {
             URL url = new URL("http://" + host + ":" + port
+                    + "/" + appName
                     + "/job/" + jobName
                     + "/executions");
 

@@ -6,7 +6,7 @@
 (defn find-undispatched []
   (model/query
    '{:find [?job-execution ?job-obj ?param-map]
-     :where [[?job-execution :job-execution/batch-status :batch-status/registered]
+     :where [[?job-execution :job-execution/batch-status :batch-status/undispatched]
              [?job-execution :job-execution/job-parameters ?parameter]
              [?job :job/executions ?job-execution]
              [?job :job/edn-notation ?edn-notation]
@@ -28,6 +28,7 @@
                                    [:*
                                     {:job/executions
                                      [:db/id
+                                      :job-execution/create-time
                                       :job-execution/start-time
                                       :job-execution/end-time
                                       {:job-execution/batch-status [:db/ident]}]}
@@ -46,6 +47,8 @@
   (->> (model/query
         '{:find [[(pull ?job-execution
                         [:db/id
+                         :job-execution/execution-id
+                         :job-execution/create-time
                          :job-execution/start-time
                          :job-execution/end-time
                          :job-execution/job-parameters
@@ -56,11 +59,10 @@
           :where [[?app :application/name ?app-name]
                   [?app :application/jobs ?job]
                   [?job :job/name ?job-name]
-                  [?job :job/executions ?job-execution]
-                  [?job-execution :job-execution/start-time]]}
+                  [?job :job/executions ?job-execution]]}
         app-name job-name)
-       (sort #(compare (:job-execution/start-time %2)
-                       (:job-execution/start-time %1)))
+       (sort #(compare (:job-execution/create-time %2)
+                       (:job-execution/create-time %1)))
        vec))
 
 (defn find-execution [job-execution]

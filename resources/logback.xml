@@ -11,8 +11,8 @@
   </appender>
 
   <logger name="datomic" level="warn"/>
-  <logger name="job-streamer.control_bus" level="info"/>
-  <logger name="net.unit8" level="debug"/>
+  <logger name="job-streamer.control-bus" level="debug"/>
+  <logger name="net.unit8" level="info"/>
 
   <logger name="job-streamer">
     <appender-ref ref="datomic"/>

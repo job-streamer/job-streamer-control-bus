@@ -43,8 +43,8 @@
   [executions]
   (when executions
     (->> executions
-         (sort #(compare (:job-execution/start-time %2)
-                         (:job-execution/start-time %1)))
+         (sort #(compare (:job-execution/create-time %2)
+                         (:job-execution/create-time %1)))
          first)))
 
 (defn- find-next-execution
@@ -116,6 +116,7 @@
                                        {:job/executions
                                         [:job-execution/start-time
                                          :job-execution/end-time
+                                         :job-execution/create-time
                                          {:job-execution/batch-status [:db/ident]}
                                          {:job-execution/agent [:agent/name]}]}
                                        {:job/schedule [:schedule/cron-notation :schedule/active?]}]
@@ -154,7 +155,8 @@
   :post! (fn [ctx]
            (when-let [[app-id job-id] (job/find-by-name app-name job-name)]
              (model/transact [{:db/id #db/id[db.part/user -1]
-                               :job-execution/batch-status :batch-status/registered
+                               :job-execution/batch-status :batch-status/undispatched
+                               :job-execution/create-time (java.util.Date.)
                                :job-execution/job-parameters (pr-str (or (:edn ctx) {}))}
                               [:db/add job-id :job/executions #db/id[db.part/user -1]]])))
   :handle-ok (fn [ctx]
@@ -207,9 +209,13 @@
                              :application/classpaths (:application/classpaths app)}]))
            (apps/register (assoc app :name "default"))
            (when-let [components (apps/scan-components (:application/classpaths app))]
-             (model/transact [(merge {:db/id #db/id[db.part/user]
-                                      :batch-component/application [:application/name "default"]}
-                                     components)])))
+             (let [batch-component-id (model/query '{:find [?c .]
+                                                     :in [$ ?app-name]
+                                                     :where [[?c :batch-component/application ?app]
+                                                             [?app :application/name ?app-name]]} "default")]
+               (model/transact [(merge {:db/id (or batch-component-id (d/tempid :db.part/user))
+                                        :batch-component/application [:application/name "default"]}
+                                       components)]))))
   :handle-ok (fn [ctx]
                (vals @apps/applications)))
 

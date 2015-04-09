@@ -11,6 +11,7 @@ import java.net.*;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
+import java.util.logging.Logger;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
@@ -45,7 +46,6 @@ public class BatchComponentScanner {
             try {
                 Class<?> clazz = cl.loadClass(className);
                 if (Batchlet.class.isAssignableFrom(clazz)) {
-                    System.out.println("batchlet:" + className);
                     container.batchlets.add((Class<? extends Batchlet>) clazz);
                 } else if (ItemReader.class.isAssignableFrom(clazz)) {
                     container.itemReaders.add((Class<? extends ItemReader>) clazz);

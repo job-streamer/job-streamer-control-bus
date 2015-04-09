@@ -2,9 +2,21 @@
 
 The JobStreamer control bus is a message passing system to agents.
 
+![](./doc/scheduling.png)
+
+# Features
+
+* Deploy a batch application. (And parse JavaBatch components from application classpath)
+* Register a job.
+* Delete a job.
+* Update a job.
+
+* Schedule a job.
+* Stop a schedule of job.
+* Delete a schedule of job.
+
 ## API
 
-You can operate the JobStreamer control bus via web API. It's format is EDN that is popular in clojure.
 
 
 ### Create a appliccation
@@ -35,7 +47,7 @@ POST /apps
 ### List jobs
 
 ```java
-GET /jobs
+GET /[app-name]/jobs
 ```
 
 #### Response
@@ -52,7 +64,7 @@ GET /jobs
 ### Create a job
 
 ```
-POST /jobs
+POST /[app-name]/jobs
 ```
 
 #### Parameters

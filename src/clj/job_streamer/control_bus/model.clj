@@ -67,6 +67,7 @@
             [name :string]))
    (schema job-execution
            (fields
+            [create-time :instant]
             [start-time  :instant]
             [end-time    :instant]
             [job-parameters :string]
@@ -105,7 +106,7 @@
   (reset! conn (d/connect uri))
   (let [schema (concat
                 (s/generate-parts (dbparts))
-                (generate-enums [:batch-status [:registered :abandoned :completed :failed :started :starting :stopped :stopping :unknown]]
+                (generate-enums [:batch-status [:undispatched :queued :abandoned :completed :failed :started :starting :stopped :stopping :unknown]]
                                 [:log-level [:trace :debug :info :warn :error]])
                 (s/generate-schema (dbschema)))]
     (d/transact

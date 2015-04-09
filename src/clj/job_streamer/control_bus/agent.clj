@@ -52,7 +52,8 @@
 
 (defn bye [ch]
   (dosync
-   (alter agents #(remove (fn [agt] (= (:agent/channel agt) ch)) %))))
+   (when-let [agt (first (filter #(= (:agent/channel %) ch)) @agents)]
+     (alter agents disj agt))))
 
 (defn execute-job
   "Send a request for job execution to an agent."

@@ -18,14 +18,19 @@
 
 (defn schedule [job-id cron-notation]
   (let [new-trigger (make-trigger job-id cron-notation)
-        job (model/pull '[:job/id
+        job (model/pull '[:job/name
                           {:job/schedule
                            [:db/id
                             :schedule/cron-notation]}] job-id)
+        app-name (model/query '{:find [?app-name .]
+                                :in [$ ?job-id]
+                                :where [[?app :application/name ?app-name]
+                                        [?app :application/jobs ?job-id]]} job-id)
         job-detail (.. (JobBuilder/newJob)
                        (ofType JobStreamerExecuteJob)
                        (withIdentity (str "job-" job-id))
-                       (usingJobData "job-name" (:job/id job))
+                       (usingJobData "app-name" app-name)
+                       (usingJobData "job-name" (:job/name job))
                        (usingJobData "host" (:host @control-bus))
                        (usingJobData "port" (:port @control-bus))
                        (build))]

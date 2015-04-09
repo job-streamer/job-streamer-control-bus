@@ -1,0 +1,39 @@
+@startuml
+
+box "Control Bus" #LightBlue
+  actor Operator
+  participant "REST API Server"
+  participant Scheduler
+  participant Dispatcher
+  participant ClassProvider
+  participant LogServer
+end box
+
+activate "REST API Server"
+activate Scheduler
+activate Dispatcher
+activate ClassProvider
+activate LogServer
+Operator -> "REST API Server": Register a job
+Operator -> "REST API Server": Schedule a job
+"REST API Server" -> Scheduler: Schedule a job
+Scheduler -> Dispatcher: execute
+
+Dispatcher -> Dispatcher: Find an agent
+activate Dispatcher
+deactivate Dispatcher
+Dispatcher --> Agent: Execute a job
+
+activate Agent
+Agent -> ClassProvider: Load classes
+ClassProvider -> Agent: Classes
+Agent -> Agent: start a job
+activate Agent
+Agent -> LogServer: Append logs
+deactivate Agent
+deactivate Agent
+deactivate Scheduler
+deactivate Dispatcher
+deactivate LogServer
+deactivate ClassProvider
+@enduml
