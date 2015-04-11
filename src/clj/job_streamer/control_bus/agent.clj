@@ -23,7 +23,7 @@
   :allowed-methods [:get]
   :handle-ok (fn [ctx]
                (when-let [agt (first
-                             (filter #(= (:agent/instance-id %) (UUID/fromString instance-id)) @agents))]
+                               (filter #(= (:agent/instance-id %) (UUID/fromString instance-id)) @agents))]
                  (ring-response
                   {:status 200
                    :headers {"Content-Type" "image/png"}
@@ -35,8 +35,21 @@
   :allowed-methods [:get]
   :handle-ok (fn [ctx]
                (when-let [agt (first
-                             (filter #(= (:agent/instance-id %) (UUID/fromString instance-id)) @agents))]
-                 (dissoc agt :agent/channel))))
+                               (filter #(= (:agent/instance-id %) (UUID/fromString instance-id)) @agents))]
+                 (-> agt
+                     (assoc :agent/executions
+                            (->> (model/query '{:find [(pull ?execution [:job-execution/create-time
+                                                                       :job-execution/start-time
+                                                                       :job-execution/end-time
+                                                                       {:job-execution/batch-status [:db/ident]}])
+                                                     (pull ?job [:job/name])]
+                                              :in [$ ?instance-id]
+                                              :where [[?job :job/executions ?execution]
+                                                      [?execution :job-execution/agent ?agt]
+                                                      [?agt :agent/instance-id ?instance-id]]} (UUID/fromString instance-id))
+                                 (map #(apply merge %))
+                                 vec))
+                     (dissoc :agent/channel)))))
 
 (defn ready [ch data]
   (log/info "ready" ch data)

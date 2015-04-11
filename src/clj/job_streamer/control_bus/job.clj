@@ -14,7 +14,7 @@
              [(clojure.edn/read-string ?parameter) ?param-map]]}))
 
 (defn find-by-name [app-name job-name]
-  (model/query 
+  (model/query
    '{:find [[?app ?job]]
      :in [$ ?app-name ?job-name]
      :where [[?app :application/name ?app-name]
