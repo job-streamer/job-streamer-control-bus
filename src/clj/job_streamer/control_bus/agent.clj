@@ -65,7 +65,7 @@
 
 (defn bye [ch]
   (dosync
-   (when-let [agt (first (filter #(= (:agent/channel %) ch)) @agents)]
+   (when-let [agt (first (filter #(= (:agent/channel %) ch) @agents))]
      (alter agents disj agt))))
 
 (defn execute-job

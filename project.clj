@@ -1,4 +1,4 @@
-(defproject net.unit8.jobstreamer/job-streamer-control-bus "0.1.0-SNAPSHOT"
+(defproject net.unit8.jobstreamer/job-streamer-control-bus "0.1.0"
   :dependencies [[org.clojure/clojure "1.6.0"]
                  [org.clojure/tools.logging "0.3.1"]
                  [org.clojure/core.async "0.1.346.0-17112a-alpha"]
