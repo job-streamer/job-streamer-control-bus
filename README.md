@@ -17,8 +17,6 @@ The JobStreamer control bus is a message passing system to agents.
 
 ## API
 
-
-
 ### Create a appliccation
 
 ```
@@ -46,8 +44,8 @@ POST /apps
 
 ### List jobs
 
-```java
-GET /[app-name]/jobs
+```
+GET /:app-name/jobs
 ```
 
 #### Response
@@ -64,7 +62,7 @@ GET /[app-name]/jobs
 ### Create a job
 
 ```
-POST /[app-name]/jobs
+POST /:app-name/jobs
 ```
 
 #### Parameters
@@ -92,43 +90,110 @@ POST /[app-name]/jobs
 ### Get a single job
 
 ```
-GET /job/:job-id
+GET /:app-name/job/:job-name
+```
+
+#### Response
+
+```clojure
+{
+  :db/id 17592186045451
+  :job/stats {
+    :total 49
+    :success 39
+    :failure 3
+    :average 2660/39
+  }
+  :job/schedule {
+    :schedule/active? true
+    :schedule/cron-notation "0 0 * * * ?"
+  }
+  :job/restartable? true
+  :job/name "MyShell"
+  :job/next-execution {
+    :job-execution/start-time #inst "2015-04-13T09:00:00.000-00:00"
+  }
+  :job/latest-execution {
+    :job-execution/batch-status {:db/ident :batch-status/queued}
+    :job-execution/create-time #inst "2015-04-13T07:00:00.006-00:00"
+  }
+}
 ```
 
 ### Update a job
 
 ```
-PUT /job/:job-id
+PUT /:app-name/job/:job-name
 ```
+
+#### Inputs
+
+|Name|Type|Description|
+|----|----|-----------|
+|id|String|Required. The identity of the job.|
 
 ### Delete a job
 
 ```
-DELETE /job/:job-id
+DELETE /:app-name/job/:job-name
 ```
 
 ### Schedule a job
 
 ```
-POST /job/:job-id/schedule
+POST /:app-name/job/:job-name/schedule
+```
+
+#### Input
+
+|Name|Type|Description|
+|----|----|-----------|
+|job/name|String|Required. A job name|
+|schedule/cron-notation|String|Required. A schedule by the cron notation.|
+
+```clojure
+{
+ :job/name "MyShell"
+ :schedule/cron-notation "0 0 * * * ?"
+}
 ```
 
 ### Execute a job
 
 ```
-POST /job/:job-id/executions
+POST /:app-name/job/:job-name/executions
 ```
 
 ### List executions
 
 ```
-GET /job/:job-id/executions
+GET /:app-name/job/:job-name/executions
+```
+
+#### Response
+
+```clojure
+[
+  {
+    :db/id 17592186045455
+    :job-execution/execution-id 119
+    :job-execution/create-time #inst "2015-04-08T04:54:15.703-00:00"
+    :job-execution/start-time #inst "2015-04-08T04:55:01.694-00:00"
+    :job-execution/end-time #inst "2015-04-08T04:55:01.796-00:00"
+    :job-execution/agent {
+      :agent/name "agent-1"
+      :agent/instance-id #uuid "5424c784-a145-4d3e-96f3-b9d99858611a"
+    }
+    :job-execution/batch-status {:db/ident :batch-status/completed}
+    :job-execution/job-parameters "{}"
+  }
+]
 ```
 
 ### Get a single execution
 
 ```
-GET /job/:job-id/execution/:execution-id
+GET /:app-name/job/:job-name/execution/:execution-id
 ```
 
 ### List agents
@@ -137,3 +202,66 @@ GET /job/:job-id/execution/:execution-id
 GET /agents
 ```
 
+#### Response
+
+```clojure
+
+```
+
+### Get a single agent
+
+```
+GET /agent/:instance-id
+```
+
+#### Response
+
+```clojure
+{
+  :agent/name "agent-1"
+  :agent/port 4510
+  :agent/jobs {:running 0}
+  :command :ready
+  :agent/instance-id #uuid "d7dd0172-d272-41a4-aad2-56318b2234ee"
+  :agent/cpu-arch "amd64"
+  :agent/cpu-core 4
+  :agent/os-name "Linux"
+  :agent/stats {
+    :memory {
+      :physical {
+        :free 1070014464
+        :total 8281976832
+      }
+      :swap {
+        :free 34325999616
+        :total 34359734272
+      }
+    }
+    :cpu {
+      :process {
+        :load 0.024032586558044806
+        :time 13050000000
+      }
+      :system {
+        :load 0.07780040733197556
+        :load-average 2.43
+      }
+    }
+  }
+  :agent/os-version "3.19.3-3-ARCH"
+  :agent/host "127.0.0.1"
+  :agent/executions []
+}
+```
+
+### Get statistics of control bus
+
+```
+GET /:app-name/stats
+```
+
+#### Response
+
+```clojure
+{:agents 0, :jobs 3}
+```
