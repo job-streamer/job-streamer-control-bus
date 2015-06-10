@@ -43,7 +43,19 @@
             [steps :ref :many]
             [edn-notation :string]
             [schedule :ref]
+            [exclusive? :boolean]
+            [time-monitor :ref]
+            [status-notifications :ref :many]
             [executions :ref :many]))
+   (schema time-monitor
+           (fields
+            [duration :long]
+            [action :ref]
+            [notification-type :string]))
+   (schema status-notification
+           (fields
+            [batch-status :ref]
+            [type :string]))
    (schema step
            (fields
             [name :string :indexed]
@@ -95,7 +107,12 @@
    (schema schedule
            (fields
             [active? :boolean]
-            [cron-notation :string]))])
+            [cron-notation :string]
+            [calendar :ref]))
+   (schema calendar
+           (fields
+            [name :string]
+            [holiday :instant :many]))])
 
 (defn generate-enums [& enums]
   (apply concat
@@ -107,7 +124,8 @@
   (let [schema (concat
                 (s/generate-parts (dbparts))
                 (generate-enums [:batch-status [:undispatched :queued :abandoned :completed :failed :started :starting :stopped :stopping :unknown]]
-                                [:log-level [:trace :debug :info :warn :error]])
+                                [:log-level [:trace :debug :info :warn :error]]
+                                [:action [:abort :alert]])
                 (s/generate-schema (dbschema)))]
     (d/transact
      @conn

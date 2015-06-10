@@ -12,7 +12,8 @@
                                       (broadcast :as broadcast)
                                       (server :as server)
                                       (scheduler :as scheduler)
-                                      (dispatcher :as dispatcher)))
+                                      (dispatcher :as dispatcher)
+                                      (notification :as notification)))
   (:use [clojure.core.async :only [chan put! <! go-loop timeout]]
         [clojure.walk]
         [liberator.representation :only [ring-response]]
@@ -98,6 +99,23 @@
                               :job/next-execution   (find-next-execution job)})
                            (job/find-all app-name query))))))
 
+(defn extract-job-parameters [job]
+  (->> (edn/read-string (:job/edn-notation job))
+       (tree-seq coll? seq)
+       (filter #(and (vector? %)
+                     (keyword? (first %))
+                     (= (name (first %)) "properties")
+                     (map? (second %))))
+       (map #(->> (second %)
+                  (vals)
+                  (map (fn [v] (->> (re-seq #"#\{([^\}]+)\}" v)
+                                    (map second))))))
+       (flatten)
+       (map #(->> (re-seq #"jobParameters\['(\w+)'\]" %)
+                  (map second)))
+       (flatten)
+       (apply hash-set)))
+
 (defresource job-resource [app-name job-name]
   :available-media-types ["application/edn"]
   :allowed-methods [:get :put :delete]
@@ -141,8 +159,42 @@
                  (-> job
                      (assoc :job/stats {:total total :success success :failure failure :average average}
                             :job/latest-execution (find-latest-execution (:job/executions job)) 
-                            :job/next-execution   (find-next-execution job))
+                            :job/next-execution   (find-next-execution job)
+                            :job/dynamic-parameters (extract-job-parameters job))
                      (dissoc :job/executions)))))
+
+(defresource job-settings-resource [app-name job-name & [cmd]]
+  :available-media-types ["application/edn"]
+  :allowed-methods [:get :delete :put]
+  :malformed? #(parse-edn %)
+  :exists? (when-let [[app-id job-id] (job/find-by-name app-name job-name)]
+             {:app-id app-id
+              :job-id job-id}) 
+  :put! (fn [{settings :edn job-id :job-id}]
+          (println settings)
+         
+          (case cmd
+            :exclusive (model/transact [{:db/id job-id :job/exclusive? true}])
+            :status-notification (if-let [id (:db/id settings)]
+                                   (model/transact [[:db/retract job-id :job/status-notifications id]])
+                                   (model/transact [[:db/add job-id :job/status-notifications #db/id[db.part/user -1]]
+                                                    {:db/id #db/id [db.part/user -1]
+                                                     :status-notification/batch-status (:status-notification/batch-status settings)
+                                                     :status-notification/type         (:status-notification/type settings)}]))))
+  :delete! (fn [{settings :edn job-id :job-id}]
+             (case cmd
+               :exclusive (model/transact [{:db/id job-id :job/exclusive? false}])))
+  :handle-ok (fn [ctx]
+               (let [settings (model/pull '[:job/exclusive?
+                                            {:job/time-monitor
+                                             [:time-monitor/duration
+                                              :time-monitor/action
+                                              :time-monitor/notification-type]}
+                                            {:job/status-notifications
+                                             [:db/id
+                                              {:status-notification/batch-status [:db/ident]} 
+                                              :status-notification/type]}] (:job-id ctx))]
+                 settings)))
 
 (defresource executions-resource [app-name job-name]
   :available-media-types ["application/edn"]
@@ -154,11 +206,16 @@
                                        (nil? job-id))
   :post! (fn [ctx]
            (when-let [[app-id job-id] (job/find-by-name app-name job-name)]
-             (model/transact [{:db/id #db/id[db.part/user -1]
-                               :job-execution/batch-status :batch-status/undispatched
-                               :job-execution/create-time (java.util.Date.)
-                               :job-execution/job-parameters (pr-str (or (:edn ctx) {}))}
-                              [:db/add job-id :job/executions #db/id[db.part/user -1]]])))
+             (let [execution-id (d/tempid :db.part/user)]
+               (model/transact [{:db/id execution-id
+                                 :job-execution/batch-status :batch-status/undispatched
+                                 :job-execution/create-time (java.util.Date.)
+                                 :job-execution/job-parameters (pr-str (or (:edn ctx) {}))}
+                                [:db/add job-id :job/executions execution-id]])
+               (when-let [time-monitor (model/pull '[{:job/time-monitor [:time-monitor/duration]}] job-id)]
+                 (scheduler/time-keeper app-name job-name execution-id
+                                        (get-in time-monitor [:job/time-monitor :time-monitor/duration])
+                                        (get-in time-monitor [:job/time-monitor :time-monitor/action]))))))
   :handle-ok (fn [ctx]
                (job/find-executions app-name job-name)))
 
@@ -166,9 +223,18 @@
   :available-media-types ["application/edn"]
   :allowed-methods [:get :put]
   :put! (fn [ctx]
-          (model/transact [{:db/id id
-                            :job-execution/batch-status :batch-status/stopped
-                            :job-execution/end-time (java.util.Date.)}]))
+          (case cmd
+            :stop (model/transact [{:db/id id
+                                    :job-execution/batch-status :batch-status/stopped
+                                    :job-execution/end-time (java.util.Date.)}])
+            :alert (let [job (model/query '{:find [(pull ?job [:job/name
+                                                               {:job/time-monitor
+                                                                [:time-monitor/notification-type]}]) .]
+                                            :in [$ ?id]
+                                            :where [[?job :job/executions ?id]]} id)]
+                     (notification/send (get-in job [:job/time-monitor :time-monitor/notification-type])
+                                        {:job/name (:job/name job)}))
+            nil))
   :handle-ok (fn [ctx]
                (job/find-execution id)))
 
@@ -190,6 +256,25 @@
   :handle-exception (fn [{ex :exception}]
                       (ring-response {:status 500
                                       :body (pr-str {:message (.getMessage ex)})})))
+
+(defresource calendars-resource
+  :available-media-types ["application/edn"]
+  :allowed-methods [:get :post]
+  :malformed? #(validate (parse-edn %)
+                         :calendar/name v/required)
+  :post! (fn [{cal :edn}]
+           (let [id (or (:db/id cal) (d/tempid :db.part/user))]
+             (model/transact [{:db/id id
+                               :calendar/name (:calendar/name cal)
+                               :calendar/holidays (:calendar/holidays cal)}])))
+  :handle-ok (fn [_]
+               []))
+
+(defresource calendar-resource [name]
+  :available-media-types ["application/edn"]
+  :allowed-methods [:get :put :delete]
+  :handle-ok (fn [ctx]
+               (model/query '{:find [?e .] :in [$ ?n] :where [[?e :calendar/name ?n]]} name)))
 
 (defresource applications-resource
   :available-media-types ["application/edn"]

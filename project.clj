@@ -1,4 +1,4 @@
-(defproject net.unit8.jobstreamer/job-streamer-control-bus "0.1.0"
+(defproject net.unit8.jobstreamer/job-streamer-control-bus "0.2.0-SNAPSHOT"
   :dependencies [[org.clojure/clojure "1.6.0"]
                  [org.clojure/tools.logging "0.3.1"]
                  [org.clojure/core.async "0.1.346.0-17112a-alpha"]
@@ -21,7 +21,9 @@
                  [org.quartz-scheduler/quartz "2.2.1"]
 
                  ;; for monitoring agents
-                 [org.rrd4j/rrd4j "2.2"]]
+                 [org.rrd4j/rrd4j "2.2"]
+
+                 [com.draines/postal "1.11.3"]]
 
   :source-paths ["src/clj"]
   :java-source-paths ["src/java"]
@@ -29,4 +31,5 @@
   :plugins [[lein-ring "0.8.13"]]
   :main job-streamer.control-bus.core
   :ring {:handler job-streamer.control-bus.core/app
-         :init    job-streamer.control-bus.core/init})
+         :init    job-streamer.control-bus.core/init}
+  :profiles {:test {:dependencies [[junit "4.125"]]}})

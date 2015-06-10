@@ -1,8 +1,8 @@
 (ns job-streamer.control-bus.scheduler
   (:require [job-streamer.control-bus.model :as model]
             [clojure.tools.logging :as log])
-  (:import [net.unit8.job_streamer.control_bus JobStreamerExecuteJob]
-           (org.quartz TriggerBuilder JobBuilder CronScheduleBuilder
+  (:import [net.unit8.job_streamer.control_bus JobStreamerExecuteJob TimeKeeperJob]
+           (org.quartz TriggerBuilder JobBuilder CronScheduleBuilder DateBuilder DateBuilder$IntervalUnit
                        TriggerKey TriggerUtils CronExpression
                        Trigger$TriggerState)
            [org.quartz.impl StdSchedulerFactory]))
@@ -15,6 +15,20 @@
       (withIdentity (str "trigger-" job-id))
       (withSchedule (CronScheduleBuilder/cronSchedule cron-notation))
       (build)))
+
+(defn time-keeper [app-name job-name execution-id duration action]
+  (let [trigger (.. (TriggerBuilder/newTrigger)
+                    (startAt (DateBuilder/futureDate duration DateBuilder$IntervalUnit/MINUTE))
+                    (build))
+        job-deail (.. (JobBuilder/newJob)
+                      (ofType TimeKeeperJob)
+                      (withIdentity (str "time-keeper-" execution-id))
+                      (usingJobData "app-name" app-name)
+                      (usingJobData "app-name" job-name)
+                      (usingJobData "execution-id" execution-id)
+                      (usingJobData "command" action)
+                      (build))]
+    (.scheduleJob @scheduler job-deail trigger)))
 
 (defn schedule [job-id cron-notation]
   (let [new-trigger (make-trigger job-id cron-notation)

@@ -6,6 +6,7 @@
             [ring.middleware.defaults :refer [wrap-defaults  api-defaults]]
             [ring.middleware.reload :refer [wrap-reload]]
             (job-streamer.control-bus (model :as model)
+                                      (notification :as notification)
                                       (job :as job)
                                       (apps :as apps)
                                       (agent :as ag)
@@ -37,6 +38,17 @@
    execution-id
    :on-success (fn [execution]
                  (log/debug "progress update: " id execution)
+                 (let [notifications (some-> (model/query '{:find [(pull ?job [{:job/status-notifications
+                                                                                [{:status-notification/batch-status [:db/ident]}
+                                                                                 :status-notification/type]}]) .]
+                                                            :in [$ ?id]
+                                                            :where [[?job :job/executions ?id]]} id)
+                                             :job/status-notifications)]
+                   (->> notifications
+                        (filter #(= (get-in % [:status-notification/batch-status :db/ident]) (:batch-status execution)))
+                        (map #(notification/send (:status-notification/type %)
+                                                 execution))
+                        doall))
                  (model/transact [{:db/id id
                                    :job-execution/batch-status (execution :batch-status)
                                    :job-execution/start-time (execution :start-time)
@@ -88,6 +100,12 @@
 
 (defroutes app-routes
   (ANY "/:app-name/jobs" [app-name] (jobs-resource app-name) )
+  (ANY ["/:app-name/job/:job-name/settings/:cmd" :app-name #".*" :job-name #".*" :cmd #"[\w\-]+"]
+      [app-name job-name cmd]
+    (job-settings-resource app-name job-name (keyword cmd)))
+  (ANY ["/:app-name/job/:job-name/settings" :app-name #".*" :job-name #".*"]
+      [app-name job-name]
+    (job-settings-resource app-name job-name))
   (ANY ["/:app-name/job/:job-name/executions" :app-name #".*" :job-name #".*"]
       [app-name job-name]
     (executions-resource app-name job-name))
@@ -109,6 +127,9 @@
       [app-name job-name] (job-resource app-name job-name))
   (ANY "/:app-name/stats" [app-name]
     (stats-resource app-name))
+  (ANY ["/calendar/:cal-name" :cal-name #".*"] [cal-name]
+    (calendar-resource name))
+  (ANY "/calendars" [] calendars-resource)
   (ANY "/agents" [] ag/agents-resource)
   (ANY "/agent/:instance-id" [instance-id]
     (ag/agent-resource instance-id))
