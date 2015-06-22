@@ -65,7 +65,7 @@
                                           ":" ws-port "/join")
                     :agent-host (.getHostAddress (:host agent-address))}}
                   (fn [{:keys [status headers error]}]
-                    (log/warn "join-request" status))))))
+                    (log/debug "join-request" status))))))
 
 (defn start [ws-port]
   (future

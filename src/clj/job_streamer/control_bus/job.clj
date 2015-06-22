@@ -1,7 +1,8 @@
 (ns job-streamer.control-bus.job
   (:require [datomic.api :as d]
-            [job-streamer.control-bus.model :as model]))
-
+            [clojure.tools.logging :as log]
+            (job-streamer.control-bus (model :as model)
+                                      (notification :as notification))))
 
 (defn find-undispatched []
   (model/query
@@ -23,47 +24,58 @@
    app-name job-name))
 
 
-(defn find-all [app-name q]
-  (let [base-query '{:find [[(pull ?job
-                                   [:*
-                                    {:job/executions
-                                     [:db/id
-                                      :job-execution/create-time
-                                      :job-execution/start-time
-                                      :job-execution/end-time
-                                      {:job-execution/batch-status [:db/ident]}]}
-                                    {:job/schedule
-                                     [:db/id :schedule/cron-notation :schedule/active?]}]) ...]]
+(defn find-all [app-name query & [offset limit]]
+  (let [base-query '{:find [?job]
                      :in [$ ?app-name ?query]
                      :where [[?app :application/name ?app-name]
-                             [?app :application/jobs ?job]]}]
-    (model/query
-     (if (not-empty q)
-       (update-in base-query [:where] conj '[(fulltext $ :job/name ?query) [[?job ?job-name]]])
-       base-query)
-     app-name (or q ""))))
+                             [?app :application/jobs ?job]]}
+        jobs (model/query (if (not-empty query)
+                            (update-in base-query [:where] conj '[(fulltext $ :job/name ?query) [[?job ?job-name]]])
+                            base-query)
+                          app-name (or query ""))]
+    {:results (->> jobs
+                   (drop (dec offset))
+                   (take limit)
+                   (map #(model/pull '[:*
+                                       {:job/executions
+                                        [:db/id
+                                         :job-execution/create-time
+                                         :job-execution/start-time
+                                         :job-execution/end-time
+                                         {:job-execution/batch-status [:db/ident]}]}
+                                       {:job/schedule
+                                        [:db/id :schedule/cron-notation :schedule/active?]}] (first %)))
+                   vec)
+     :hits   (count jobs)
+     :offset offset
+     :limit limit}))
 
-(defn find-executions [app-name job-name]
-  (->> (model/query
-        '{:find [[(pull ?job-execution
-                        [:db/id
-                         :job-execution/execution-id
-                         :job-execution/create-time
-                         :job-execution/start-time
-                         :job-execution/end-time
-                         :job-execution/job-parameters
-                         {:job-execution/batch-status [:db/ident]
-                          :job-execution/agent
-                          [:agent/instance-id :agent/name]}]) ...]]
-          :in [$ ?app-name ?job-name]
-          :where [[?app :application/name ?app-name]
-                  [?app :application/jobs ?job]
-                  [?job :job/name ?job-name]
-                  [?job :job/executions ?job-execution]]}
-        app-name job-name)
-       (sort #(compare (:job-execution/create-time %2)
-                       (:job-execution/create-time %1)))
-       vec))
+(defn find-executions [app-name job-name & [offset limit]]
+  (let [executions (model/query '{:find [?job-execution ?create-time]
+                                  :in [$ ?app-name ?job-name]
+                                  :where [[?job-execution :job-execution/create-time ?create-time]
+                                          [?app :application/name ?app-name]
+                                          [?app :application/jobs ?job]
+                                          [?job :job/name ?job-name]
+                                          [?job :job/executions ?job-execution]]} app-name job-name)]
+    {:results (->> executions
+                   (sort-by second #(compare %2 %1))
+                   (drop (dec offset))
+                   (take limit)
+                   (map #(model/pull '[:db/id
+                                       :job-execution/execution-id
+                                       :job-execution/create-time
+                                       :job-execution/start-time
+                                       :job-execution/end-time
+                                       :job-execution/job-parameters
+                                       {:job-execution/batch-status [:db/ident]
+                                        :job-execution/agent
+                                        [:agent/instance-id :agent/name]}] (first %)))
+                   
+                   vec)
+     :hits    (count executions)
+     :offset  offset
+     :limit   limit}))
 
 (defn find-execution [job-execution]
   (let [je (model/pull '[:*
@@ -71,10 +83,11 @@
                          {:job-execution/step-executions
                           [:*
                            {:step-execution/batch-status [:db/ident]}
-                           {:step-execution/step [:step/id]}]}] job-execution)] 
+                           {:step-execution/step [:step/name]}]}] job-execution)]
     (update-in je [:job-execution/step-executions]
                #(map (fn [step-execution]
-                       (assoc step-execution :step-execution/logs
+                       (assoc step-execution
+                              :step-execution/logs
                               (->> (model/query '{:find [[(pull ?log [:* {:execution-log/level [:db/ident]}]) ...]]
                                                   :in [$ ?step-execution-id ?instance-id]
                                                   :where [[?log :execution-log/step-execution-id ?step-execution-id]
@@ -82,9 +95,7 @@
                                                           [?agent :agent/instance-id ?instance-id]]}
                                                 (:step-execution/step-execution-id step-execution)
                                                 (get-in je [:job-execution/agent :agent/instance-id] ""))
-                                   (sort (fn [l1 l2]
-                                           (compare (:execution-log/date l1)
-                                                    (:execution-log/date l2))))))) %))))
+                                   (sort-by :execution-log/date compare)))) %))))
 
 (defn find-step-execution [instance-id step-execution-id]
   (model/query
@@ -95,6 +106,25 @@
              [?job-execution :job-execution/step-executions ?step-execution]
              [?step-execution :step-execution/step-execution-id ?step-execution-id]]}
    instance-id step-execution-id))
+
+
+(defn save-execution [id execution]
+  (log/debug "progress update: " id execution)
+  (let [notifications (some-> (model/query '{:find [(pull ?job [{:job/status-notifications
+                                                                 [{:status-notification/batch-status [:db/ident]}
+                                                                  :status-notification/type]}]) .]
+                                             :in [$ ?id]
+                                             :where [[?job :job/executions ?id]]} id)
+                              :job/status-notifications)]
+    (->> notifications
+         (filter #(= (get-in % [:status-notification/batch-status :db/ident]) (:batch-status execution)))
+         (map #(notification/send (:status-notification/type %)
+                                  execution))
+         doall))
+  (model/transact [{:db/id id
+                    :job-execution/batch-status (execution :batch-status)
+                    :job-execution/start-time (execution :start-time)
+                    :job-execution/end-time (execution :end-time)}]))
 
 (defn edn->datoms
   "Convert a format from EDN to datom."

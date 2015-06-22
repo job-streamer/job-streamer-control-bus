@@ -19,7 +19,7 @@ public class TimeKeeperJob implements Job {
         JobDataMap data = context.getMergedJobDataMap();
         String appName = data.getString("app-name");
         String jobName = data.getString("job-name");
-        String executionId = data.getString("execution-id");
+        Long executionId = data.getLong("execution-id");
         String command = data.getString("command");
 
         String host = data.getString("host");
@@ -39,7 +39,7 @@ public class TimeKeeperJob implements Job {
             ((HttpURLConnection) conn).setRequestMethod("PUT");
             conn.connect();
             int statusCode = ((HttpURLConnection) conn).getResponseCode();
-            if (statusCode != HttpURLConnection.HTTP_NO_CONTENT) {
+            if (statusCode != HttpURLConnection.HTTP_CREATED) {
                 throw new JobExecutionException("HttpRequest not success:" + statusCode);
             }
         } catch (IOException ex) {

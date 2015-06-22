@@ -6,3 +6,4 @@ resources/public/js/jobs.js
 pom.xml
 .idea
 *.iml
+/lib

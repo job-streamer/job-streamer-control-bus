@@ -13,7 +13,8 @@
                                       (broadcast :as broadcast)
                                       (server :as server)
                                       (scheduler :as scheduler)
-                                      (dispatcher :as dispatcher)))
+                                      (dispatcher :as dispatcher)
+                                      (recovery :as recovery)))
   (:use [clojure.core.async :only [chan put! <! go go-loop timeout]]
         [liberator.representation :only [ring-response]]
         [job-streamer.control-bus.api]
@@ -36,23 +37,8 @@
   (ag/update-execution
    (ag/find-agent-by-channel ch)
    execution-id
-   :on-success (fn [execution]
-                 (log/debug "progress update: " id execution)
-                 (let [notifications (some-> (model/query '{:find [(pull ?job [{:job/status-notifications
-                                                                                [{:status-notification/batch-status [:db/ident]}
-                                                                                 :status-notification/type]}]) .]
-                                                            :in [$ ?id]
-                                                            :where [[?job :job/executions ?id]]} id)
-                                             :job/status-notifications)]
-                   (->> notifications
-                        (filter #(= (get-in % [:status-notification/batch-status :db/ident]) (:batch-status execution)))
-                        (map #(notification/send (:status-notification/type %)
-                                                 execution))
-                        doall))
-                 (model/transact [{:db/id id
-                                   :job-execution/batch-status (execution :batch-status)
-                                   :job-execution/start-time (execution :start-time)
-                                   :job-execution/end-time (execution :end-time)}]))))
+   :on-success (fn [response]
+                 (job/save-execution id response))))
 
 (defmethod handle-command :start-step [{:keys [id execution-id step-execution-id step-name instance-id]} ch]
   (log/debug "start-step" step-name execution-id step-execution-id)
@@ -131,6 +117,10 @@
     (calendar-resource name))
   (ANY "/calendars" [] calendars-resource)
   (ANY "/agents" [] ag/agents-resource)
+  (ANY ["/agent/:instance-id/:cmd" :instance-id #"[A-Za-z0-9\-]+" :cmd #"\w+"]
+      [instance-id cmd]
+    (ag/agent-resource instance-id (keyword cmd)))
+
   (ANY "/agent/:instance-id" [instance-id]
     (ag/agent-resource instance-id))
   (ANY "/agent/:instance-id/monitor/:type/:cycle" [instance-id type cycle]
@@ -164,6 +154,7 @@
       (<! (timeout 2000))
       (recur)))
   (ag/start-monitor)
+  (recovery/update-job-status)
 
   (server/run-server
    (-> app-routes

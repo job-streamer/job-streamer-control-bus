@@ -18,6 +18,10 @@
 (defn transact [transaction]
   @(d/transact @conn transaction))
 
+(defn resolve-tempid [tempids tempid]
+  (let [db (d/db @conn)]
+    (d/resolve-tempid db tempids tempid)))
+
 (defn dbparts []
   [(part "job")])
 
@@ -112,7 +116,8 @@
    (schema calendar
            (fields
             [name :string]
-            [holiday :instant :many]))])
+            [weekly-holiday :boolean :many]
+            [holidays :instant :many]))])
 
 (defn generate-enums [& enums]
   (apply concat
@@ -125,7 +130,7 @@
                 (s/generate-parts (dbparts))
                 (generate-enums [:batch-status [:undispatched :queued :abandoned :completed :failed :started :starting :stopped :stopping :unknown]]
                                 [:log-level [:trace :debug :info :warn :error]]
-                                [:action [:abort :alert]])
+                                [:action [:abandon :stop :alert]])
                 (s/generate-schema (dbschema)))]
     (d/transact
      @conn

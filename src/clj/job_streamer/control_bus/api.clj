@@ -18,9 +18,16 @@
         [clojure.walk]
         [liberator.representation :only [ring-response]]
         [ring.util.response :only [header]]
-        (job-streamer.control-bus (agent :only [find-agent execute-job available-agents] :as ag)
+        (job-streamer.control-bus (agent :only [find-agent available-agents] :as ag)
                                   (validation :only [validate])))
   (:import [java.util Date]))
+
+(defn- to-int [n default-value]
+  (if (nil? n)
+    default-value
+    (condp = (type n)
+      String (Integer/parseInt n)
+      Number (int n))))
 
 (defn- body-as-string [ctx]
   (if-let [body (get-in ctx [:request :body])]
@@ -85,19 +92,24 @@
   :post! (fn [{job :edn}]
            (let [datoms (job/edn->datoms job nil)
                  job-id (:db/id (first datoms))]
+             
              (model/transact (conj datoms
                                    [:db/add [:application/name app-name] :application/jobs job-id]))
              job))
-  :handle-ok (fn [{{{query "q"} :query-params} :request}]
-               (let []
-                 (vec (map (fn [{job-name :job/name
-                                 executions :job/executions
-                                 schedule :job/schedule :as job}]
-                             {:job/name job-name
-                              :job/executions (append-schedule (:db/id job) executions schedule)
-                              :job/latest-execution (find-latest-execution executions)
-                              :job/next-execution   (find-next-execution job)})
-                           (job/find-all app-name query))))))
+  :handle-ok (fn [{{{query :q :keys [limit offset]} :params} :request}]
+               (let [jobs (job/find-all app-name query
+                                       (to-int offset 0)
+                                       (to-int limit 20))]
+                 (update-in jobs [:results]
+                            #(->> %
+                                  (map (fn [{job-name :job/name
+                                             executions :job/executions
+                                             schedule :job/schedule :as job}]
+                                         {:job/name job-name
+                                          :job/executions (append-schedule (:db/id job) executions schedule)
+                                          :job/latest-execution (find-latest-execution executions)
+                                          :job/next-execution   (find-next-execution job)}))
+                                  vec)))))
 
 (defn extract-job-parameters [job]
   (->> (edn/read-string (:job/edn-notation job))
@@ -136,7 +148,7 @@
                                          :job-execution/end-time
                                          :job-execution/create-time
                                          {:job-execution/batch-status [:db/ident]}
-                                         {:job-execution/agent [:agent/name]}]}
+                                         {:job-execution/agent [:agent/name :agent/instance-id]}]}
                                        {:job/schedule [:schedule/cron-notation :schedule/active?]}]
                               (:job-id ctx))
                      total (count (:job/executions job))
@@ -171,24 +183,29 @@
              {:app-id app-id
               :job-id job-id}) 
   :put! (fn [{settings :edn job-id :job-id}]
-          (println settings)
-         
           (case cmd
             :exclusive (model/transact [{:db/id job-id :job/exclusive? true}])
             :status-notification (if-let [id (:db/id settings)]
                                    (model/transact [[:db/retract job-id :job/status-notifications id]])
                                    (model/transact [[:db/add job-id :job/status-notifications #db/id[db.part/user -1]]
-                                                    {:db/id #db/id [db.part/user -1]
+                                                    {:db/id #db/id[db.part/user -1]
                                                      :status-notification/batch-status (:status-notification/batch-status settings)
-                                                     :status-notification/type         (:status-notification/type settings)}]))))
+                                                     :status-notification/type         (:status-notification/type settings)}]))
+            :time-monitor (model/transact [(merge {:db/id #db/id[db.part/user -1]} settings)
+                                           {:db/id job-id :job/time-monitor #db/id[db.part/user -1]}])))
   :delete! (fn [{settings :edn job-id :job-id}]
              (case cmd
-               :exclusive (model/transact [{:db/id job-id :job/exclusive? false}])))
+               :exclusive (model/transact [{:db/id job-id :job/exclusive? false}])
+               :time-monitor (when-let [time-monitor-id (some-> (model/pull '[:job/time-monitor] job-id)
+                                                                :job/time-monitor
+                                                                :db/id)]
+                               (model/transact [[:db/retract job-id :job/time-monitor time-monitor-id]
+                                                [:db.fn/retractEntity time-monitor-id]]))))
   :handle-ok (fn [ctx]
                (let [settings (model/pull '[:job/exclusive?
                                             {:job/time-monitor
                                              [:time-monitor/duration
-                                              :time-monitor/action
+                                              {:time-monitor/action [:db/ident]} 
                                               :time-monitor/notification-type]}
                                             {:job/status-notifications
                                              [:db/id
@@ -196,37 +213,66 @@
                                               :status-notification/type]}] (:job-id ctx))]
                  settings)))
 
+(defn- execute-job [app-name job-name ctx]  
+  (when-let [[app-id job-id] (job/find-by-name app-name job-name)]
+    (let [execution-id (d/tempid :db.part/user)
+          tempids (-> (model/transact [{:db/id execution-id
+                                       :job-execution/batch-status :batch-status/undispatched
+                                       :job-execution/create-time (java.util.Date.)
+                                       :job-execution/job-parameters (pr-str (or (:edn ctx) {}))}
+                                       [:db/add job-id :job/executions execution-id]])
+                      :tempids)]
+      (when-let [time-monitor (model/pull '[{:job/time-monitor [:time-monitor/duration
+                                                                {:time-monitor/action [:db/ident]}]}] job-id)]
+        (scheduler/time-keeper app-name job-name (model/resolve-tempid tempids execution-id)
+                               (get-in time-monitor [:job/time-monitor :time-monitor/duration])
+                               (get-in time-monitor [:job/time-monitor :time-monitor/action :db/ident]))))))
+
+
+
 (defresource executions-resource [app-name job-name]
   :available-media-types ["application/edn"]
   :allowed-methods [:get :post]
   :malformed? #(parse-edn %)
   :exists? (when-let [[app-id job-id] (job/find-by-name app-name job-name)]
-             {:job-id job-id})
-  :if-match-star-exists-for-missing? (fn [{job-id :job-id}]
-                                       (nil? job-id))
-  :post! (fn [ctx]
-           (when-let [[app-id job-id] (job/find-by-name app-name job-name)]
-             (let [execution-id (d/tempid :db.part/user)]
-               (model/transact [{:db/id execution-id
-                                 :job-execution/batch-status :batch-status/undispatched
-                                 :job-execution/create-time (java.util.Date.)
-                                 :job-execution/job-parameters (pr-str (or (:edn ctx) {}))}
-                                [:db/add job-id :job/executions execution-id]])
-               (when-let [time-monitor (model/pull '[{:job/time-monitor [:time-monitor/duration]}] job-id)]
-                 (scheduler/time-keeper app-name job-name execution-id
-                                        (get-in time-monitor [:job/time-monitor :time-monitor/duration])
-                                        (get-in time-monitor [:job/time-monitor :time-monitor/action]))))))
-  :handle-ok (fn [ctx]
-               (job/find-executions app-name job-name)))
+             {:job (model/pull '[:job/exclusive?
+                                 {:job/executions
+                                  [:job-execution/create-time
+                                   {:job-execution/batch-status [:db/ident]}]}] job-id)})
+  :post-to-existing? (fn [ctx]
+                       (when (#{:put :post} (get-in ctx [:request :request-method]))
+                         (not (:job/exclusive? (:job ctx)))))  
+  :put-to-existing? (fn [ctx]
+                      (#{:put :post} (get-in ctx [:request :request-method])))
+  :conflict? (fn [{job :job}]
+               (if-let [last-execution (some->> (:job/executions job)
+                                                (sort #(compare (:job-execution/create-time %2) (:job-execution/create-time %1)))
+                                                first)]
+                 (contains? #{:batch-status/undispatched
+                              :batch-status/queued
+                              :batch-status/starting
+                              :batch-status/started
+                              :batch-status/stopping}
+                            (get-in last-execution [:job-execution/batch-status :db/ident])) 
+                 false))
+  :put!  #(execute-job app-name job-name %)
+  :post! #(execute-job app-name job-name %)
+  :handle-ok (fn [{{{:keys [offset limit]} :params} :request}]
+               (job/find-executions app-name job-name
+                                    (to-int offset 0)
+                                    (to-int limit 20))))
 
 (defresource execution-resource [id & [cmd]]
   :available-media-types ["application/edn"]
   :allowed-methods [:get :put]
   :put! (fn [ctx]
           (case cmd
-            :stop (model/transact [{:db/id id
-                                    :job-execution/batch-status :batch-status/stopped
-                                    :job-execution/end-time (java.util.Date.)}])
+            :abandon (when-not (some-> (model/pull '[:job-execution/end-time] id)
+                                       :job-execution/end-time)
+                       ;; TODO
+                       (model/transact [{:db/id id
+                                         :job-execution/batch-status :batch-status/abandoned
+                                         :job-execution/end-time (java.util.Date.)}]))
             :alert (let [job (model/query '{:find [(pull ?job [:job/name
                                                                {:job/time-monitor
                                                                 [:time-monitor/notification-type]}]) .]
@@ -266,13 +312,21 @@
            (let [id (or (:db/id cal) (d/tempid :db.part/user))]
              (model/transact [{:db/id id
                                :calendar/name (:calendar/name cal)
-                               :calendar/holidays (:calendar/holidays cal)}])))
+                               :calendar/holidays (:calendar/holidays cal)
+                               :calendar/weekly-holiday (:calendar/weekly-holiday cal)}])))
   :handle-ok (fn [_]
                []))
 
 (defresource calendar-resource [name]
   :available-media-types ["application/edn"]
   :allowed-methods [:get :put :delete]
+  :put! (fn [{cal :edn}]
+          (model/transact [{:db/id [:calendar/name name]
+                            :calendar/name (:calendar/name cal)
+                            :calendar/holidays (:calendar/holidays cal)
+                            :calendar/weekly-holiday (:calendar/weekly-holiday cal)}]))
+  :delete! (fn [ctx]
+             (model/transact [[:db.fn/retractEntity [:calendar/name name]]]))
   :handle-ok (fn [ctx]
                (model/query '{:find [?e .] :in [$ ?n] :where [[?e :calendar/name ?n]]} name)))
 

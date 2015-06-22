@@ -1,9 +1,12 @@
 package net.unit8.job_streamer.control_bus;
 
+import com.google.common.base.Strings;
+
 import javax.batch.api.Batchlet;
 import javax.batch.api.chunk.ItemProcessor;
 import javax.batch.api.chunk.ItemReader;
 import javax.batch.api.chunk.ItemWriter;
+import javax.inject.Named;
 import java.io.File;
 import java.io.IOException;
 import java.io.Serializable;
@@ -31,6 +34,18 @@ public class BatchComponentScanner {
         return entryNames;
     }
 
+    String decideRefName(Class<?> clazz) {
+        System.err.println(clazz);
+        System.err.println(clazz.getAnnotations());
+        Named named = clazz.getDeclaredAnnotation(Named.class);
+        if (named != null && !Strings.isNullOrEmpty(named.value())) {
+            return named.value();
+        } else {
+            return clazz.getName();
+        }
+
+    }
+
     void pickOverBatchComponent(String resourcePath, ClassLoader cl) {
         if (resourcePath.endsWith(".class")) {
             String className = resourcePath
@@ -46,15 +61,15 @@ public class BatchComponentScanner {
             try {
                 Class<?> clazz = cl.loadClass(className);
                 if (Batchlet.class.isAssignableFrom(clazz)) {
-                    container.batchlets.add((Class<? extends Batchlet>) clazz);
+                    container.batchlets.add(decideRefName(clazz));
                 } else if (ItemReader.class.isAssignableFrom(clazz)) {
-                    container.itemReaders.add((Class<? extends ItemReader>) clazz);
+                    container.itemReaders.add(decideRefName(clazz));
                 } else if (ItemWriter.class.isAssignableFrom(clazz)) {
-                    container.itemWriters.add((Class<? extends ItemWriter>) clazz);
+                    container.itemWriters.add(decideRefName(clazz));
                 } else if (ItemProcessor.class.isAssignableFrom(clazz)) {
-                    container.itemProcessors.add((Class<? extends ItemProcessor>) clazz);
+                    container.itemProcessors.add(decideRefName(clazz));
                 } else if (Throwable.class.isAssignableFrom(clazz)) {
-                    container.throwables.add((Class<? extends Throwable>) clazz);
+                    container.throwables.add(decideRefName(clazz));
                 }
             } catch (ClassNotFoundException | NoClassDefFoundError e) {
                 // ignore
@@ -122,30 +137,30 @@ public class BatchComponentScanner {
         URLClassLoader cl = new URLClassLoader(urls.toArray(new URL[args.length]), BatchComponentContaienr.class.getClassLoader());
         BatchComponentScanner scanner = new BatchComponentScanner();
         scanner.findBatchComponents(cl);
-        for (Class<? extends Batchlet> batchlet : scanner.container.batchlets) {
-            System.out.println("batchlet:" + batchlet.getName());
+        for (String batchlet : scanner.container.batchlets) {
+            System.out.println("batchlet:" + batchlet);
         }
-        for (Class<? extends ItemReader> itemReader : scanner.container.itemReaders) {
-            System.out.println("item-reader:" + itemReader.getName());
+        for (String itemReader : scanner.container.itemReaders) {
+            System.out.println("item-reader:" + itemReader);
         }
-        for (Class<? extends ItemWriter> itemWriter : scanner.container.itemWriters) {
-            System.out.println("item-writer:" + itemWriter.getName());
+        for (String itemWriter : scanner.container.itemWriters) {
+            System.out.println("item-writer:" + itemWriter);
         }
-        for (Class<? extends ItemProcessor> itemProcessor : scanner.container.itemProcessors) {
-            System.out.println("item-processor:"+ itemProcessor.getName());
+        for (String itemProcessor : scanner.container.itemProcessors) {
+            System.out.println("item-processor:"+ itemProcessor);
         }
-        for (Class<? extends Throwable> throwable : scanner.container.throwables) {
-            System.out.println("throwable:" + throwable.getName());
+        for (String throwable : scanner.container.throwables) {
+            System.out.println("throwable:" + throwable);
         }
 
     }
 
     static class BatchComponentContaienr implements Serializable {
-        public Set<Class<? extends Batchlet>> batchlets = new HashSet<>();
-        public Set<Class<? extends ItemReader>> itemReaders = new HashSet<>();
-        public Set<Class<? extends ItemWriter>> itemWriters = new HashSet<>();
-        public Set<Class<? extends ItemProcessor>> itemProcessors = new HashSet<>();
-        public Set<Class<? extends Throwable>> throwables = new HashSet<>();
+        public Set<String> batchlets = new HashSet<>();
+        public Set<String> itemReaders = new HashSet<>();
+        public Set<String> itemWriters = new HashSet<>();
+        public Set<String> itemProcessors = new HashSet<>();
+        public Set<String> throwables = new HashSet<>();
 
         @Override
         public String toString() {

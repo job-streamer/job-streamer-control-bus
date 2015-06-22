@@ -4,7 +4,7 @@
             (job-streamer.control-bus (agent :as ag)
                                       (model :as model))))
 
-(def dispatcher-ch (chan))
+(defonce dispatcher-ch (chan))
 
 (defn- dispatch [agt execution-request]
   (ag/execute-job agt execution-request
@@ -12,20 +12,26 @@
                            (log/error "failure submit job [" (get-in execution-request [:job :job/name])
                                       "] at host [" (:host agt) "]" e)
                            (put! dispatcher-ch execution-request))
-               :on-success (fn [{:keys [execution-id]}]
+               :on-success (fn [{:keys [execution-id batch-status start-time] :as res}]
+                             (println res)
                              (if execution-id
-                               (model/transact [{:db/id (:request-id execution-request)
-                                                 :job-execution/execution-id execution-id
-                                                 :job-execution/agent [:agent/instance-id (:agent/instance-id agt)]
-                                                 :job-execution/batch-status :batch-status/starting}])
+                               (model/transact [(merge {:db/id (:request-id execution-request)
+                                                        :job-execution/execution-id execution-id
+                                                        :job-execution/agent [:agent/instance-id (:agent/instance-id agt)]
+                                                        :job-execution/batch-status batch-status}
+                                                       (when start-time
+                                                         {:job-execution/start-time start-time}))])
                                (model/transact [{:db/id (:request-id execution-request)
                                                  :job-execution/agent [:agent/instance-id (:agent/instance-id agt)]
                                                  :job-execution/batch-status :batch-status/abandoned}])))))
 
 (defn submit [execution-request]
-  (put! dispatcher-ch execution-request)
-  (model/transact [{:db/id (:request-id execution-request)
-                    :job-execution/batch-status :batch-status/queued}]))
+  (try
+    (put! dispatcher-ch execution-request)
+    (model/transact [{:db/id (:request-id execution-request)
+                      :job-execution/batch-status :batch-status/queued}])
+    (catch Exception ex
+      (log/error "dispatch failure" ex))))
 
 (defn start []
   (go-loop []

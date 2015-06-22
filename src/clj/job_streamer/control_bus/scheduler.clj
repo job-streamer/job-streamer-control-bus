@@ -24,9 +24,11 @@
                       (ofType TimeKeeperJob)
                       (withIdentity (str "time-keeper-" execution-id))
                       (usingJobData "app-name" app-name)
-                      (usingJobData "app-name" job-name)
+                      (usingJobData "job-name" job-name)
                       (usingJobData "execution-id" execution-id)
-                      (usingJobData "command" action)
+                      (usingJobData "command" (name action))
+                      (usingJobData "host" (:host @control-bus))
+                      (usingJobData "port" (:port @control-bus))
                       (build))]
     (.scheduleJob @scheduler job-deail trigger)))
 

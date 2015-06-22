@@ -1,5 +1,5 @@
 (defproject net.unit8.jobstreamer/job-streamer-control-bus "0.2.0-SNAPSHOT"
-  :dependencies [[org.clojure/clojure "1.6.0"]
+  :dependencies [[org.clojure/clojure "1.7.0-RC1"]
                  [org.clojure/tools.logging "0.3.1"]
                  [org.clojure/core.async "0.1.346.0-17112a-alpha"]
                  [javax/javaee-api "7.0"]
@@ -16,19 +16,22 @@
                  [ring "1.3.2"]
                  [http-kit "2.1.19"]
                  [ch.qos.logback/logback-classic "1.1.3"]
+                 [org.jboss.weld.se/weld-se "2.2.7.Final"]
+                 [net.unit8.weld/weld-prescan "0.1.0-SNAPSHOT"]
 
                  ;; for Scheduler
                  [org.quartz-scheduler/quartz "2.2.1"]
 
                  ;; for monitoring agents
-                 [org.rrd4j/rrd4j "2.2"]
-
-                 [com.draines/postal "1.11.3"]]
+                 [org.rrd4j/rrd4j "2.2"]]
 
   :source-paths ["src/clj"]
   :java-source-paths ["src/java"]
 
-  :plugins [[lein-ring "0.8.13"]]
+  :plugins [[lein-ring "0.8.13"]
+            [lein-libdir "0.1.1"]]
+  :libdir-path "lib"
+
   :main job-streamer.control-bus.core
   :ring {:handler job-streamer.control-bus.core/app
          :init    job-streamer.control-bus.core/init}
