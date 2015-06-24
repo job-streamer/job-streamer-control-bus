@@ -17,7 +17,7 @@
                  [http-kit "2.1.19"]
                  [ch.qos.logback/logback-classic "1.1.3"]
                  [org.jboss.weld.se/weld-se "2.2.7.Final"]
-                 [net.unit8.weld/weld-prescan "0.1.0-SNAPSHOT"]
+                 [net.unit8.weld/weld-prescan "0.1.0"]
 
                  ;; for Scheduler
                  [org.quartz-scheduler/quartz "2.2.1"]
