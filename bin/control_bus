@@ -1,0 +1,5 @@
+#!/bin/sh
+
+version=$(cat `dirname $0`/../VERSION)
+
+java -cp dist/job-streamer-control-bus-${VERSION}.jar:"lib/*" core.main -m job-streamer.control-bus.core

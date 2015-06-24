@@ -8,12 +8,15 @@
 
 (defn- dispatch [agt execution-request]
   (ag/execute-job agt execution-request
-               :on-error (fn [e]
+               :on-error (fn [status e]
                            (log/error "failure submit job [" (get-in execution-request [:job :job/name])
                                       "] at host [" (:host agt) "]" e)
-                           (put! dispatcher-ch execution-request))
+                           (if (not= status 503)
+                             (model/transact [{:db/id (:request-id execution-request)
+                                               :job-execution/agent [:agent/instance-id (:agent/instance-id agt)]
+                                               :job-execution/batch-status :batch-status/abandoned}])
+                             (put! dispatcher-ch execution-request)))
                :on-success (fn [{:keys [execution-id batch-status start-time] :as res}]
-                             (println res)
                              (if execution-id
                                (model/transact [(merge {:db/id (:request-id execution-request)
                                                         :job-execution/execution-id execution-id

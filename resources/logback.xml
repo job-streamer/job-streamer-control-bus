@@ -14,7 +14,7 @@
   <logger name="job-streamer.control-bus" level="debug"/>
   <logger name="net.unit8" level="info"/>
 
-  <logger name="job-streamer">
+  <logger name="example">
     <appender-ref ref="datomic"/>
   </logger>
 

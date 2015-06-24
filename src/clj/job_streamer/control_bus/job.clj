@@ -121,10 +121,12 @@
          (map #(notification/send (:status-notification/type %)
                                   execution))
          doall))
-  (model/transact [{:db/id id
-                    :job-execution/batch-status (execution :batch-status)
-                    :job-execution/start-time (execution :start-time)
-                    :job-execution/end-time (execution :end-time)}]))
+  (model/transact [(merge {:db/id id
+                           :job-execution/batch-status (:batch-status execution)}
+                          (when-let [start-time (:start-time execution)]
+                            {:job-execution/start-time start-time})
+                          (when-let [end-time (:end-time execution)]
+                            {:job-execution/end-time end-time}))]))
 
 (defn edn->datoms
   "Convert a format from EDN to datom."

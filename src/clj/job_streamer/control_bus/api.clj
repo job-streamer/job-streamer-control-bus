@@ -78,11 +78,11 @@
     :allowed-methods [:get]
     :handle-ok (fn [ctx]
                  {:agents (count (ag/available-agents))
-                  :jobs   (model/query '{:find [(count ?job) .]
-                                         :in [$ ?app-name]
-                                         :where [[?app :application/name ?app-name]
-                                                 [?app :application/jobs ?job]]}
-                                       app-name)}))
+                  :jobs   (or (model/query '{:find [(count ?job) .]
+                                            :in [$ ?app-name]
+                                            :where [[?app :application/name ?app-name]
+                                                    [?app :application/jobs ?job]]}
+                                          app-name) 0)}))
 
 (defresource jobs-resource [app-name]
   :available-media-types ["application/edn"]
@@ -267,12 +267,14 @@
   :allowed-methods [:get :put]
   :put! (fn [ctx]
           (case cmd
-            :abandon (when-not (some-> (model/pull '[:job-execution/end-time] id)
-                                       :job-execution/end-time)
-                       ;; TODO
-                       (model/transact [{:db/id id
-                                         :job-execution/batch-status :batch-status/abandoned
-                                         :job-execution/end-time (java.util.Date.)}]))
+            :abandon (let [execution (model/pull '[:job-execution/execution-id] id)] 
+                       (ag/stop-execution (:job-execution/execution-id execution)
+                                          :on-success #(ag/update-execution id)))
+
+            :stop (let [execution (model/pull '[:job-execution/execution-id] id)] 
+                       (ag/stop-execution (:job-execution/execution-id execution)
+                                          :on-success #(ag/update-execution id)))
+            
             :alert (let [job (model/query '{:find [(pull ?job [:job/name
                                                                {:job/time-monitor
                                                                 [:time-monitor/notification-type]}]) .]
@@ -346,7 +348,7 @@
                              :application/name "default" ;; Todo multi applications.
                              :application/description (:application/description app)
                              :application/classpaths (:application/classpaths app)}]))
-           (apps/register (assoc app :name "default"))
+           (apps/register (assoc app :application/name "default"))
            (when-let [components (apps/scan-components (:application/classpaths app))]
              (let [batch-component-id (model/query '{:find [?c .]
                                                      :in [$ ?app-name]

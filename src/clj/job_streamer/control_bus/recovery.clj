@@ -1,7 +1,8 @@
 (ns job-streamer.control-bus.recovery
-  (:require (job-streamer.control-bus (model :as model)
-                                      (agent :as ag)
-                                      (job :as job))))
+  (:require [clojure.tools.logging :as log]
+            (job-streamer.control-bus (model :as model)
+                                         (agent :as ag)
+                                         (job :as job))))
 
 (defn update-job-status []
   (let [execution-ids (model/query '{:find [[?execution ...]]
@@ -21,5 +22,6 @@
         (if agt
           (ag/update-execution agt (:job-execution/execution-id execution)
                                :on-success (fn [response]
+                                             (log/debug "Update execution " response)
                                              (job/save-execution execution-id response)))
           (model/transact [{:db/id execution-id :job-execution/batch-status :batch-status/unknown}]))))))

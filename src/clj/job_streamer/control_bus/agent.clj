@@ -85,34 +85,48 @@
              {:body (pr-str execution-request)
               :headers {"Content-Type" "application/edn"}}
              (fn [{:keys [status headers body error]}]
-               (cond (and error on-error) (on-error error)
+               (cond (or (>= status 400) error)
+                     (when on-error (on-error status error)) 
                      on-success (on-success (edn/read-string body))))))
 
-(defn stop-execution [agt execution-id & {:keys [on-error on-success]}]
-  (http/post (str "http://" (:agent/host agt) ":" (:agent/port agt) "/job-execution/" execution-id "/stop")
-             {:as :text
-              :body (pr-str {})
-              :headers {"Content-Type" "application/edn"}}
-            (fn [{:keys [status headers body error]}]
-              (cond (and error on-error) (on-error error)
-                    on-success (on-success (edn/read-string body))))))
+(defn stop-execution [execution-id & {:keys [on-error on-success]}]
+  (let [instance-id (some-> (model/pull '[{:job-execution/agent [:agent/instance-id]}] execution-id)
+                            (get-in [:job-execution/agent :agent/instance-id]))]
+    (when-let [agt (get @agents instance-id)]
+      (http/post (str "http://" (:agent/host agt) ":" (:agent/port agt) "/job-execution/" execution-id "/stop")
+                 {:as :text
+                  :body (pr-str {})
+                  :headers {"Content-Type" "application/edn"}}
+                 (fn [{:keys [status headers body error]}]
+                   (cond (or (>= status 400) error) (when on-error (on-error error))
+                         on-success (on-success (edn/read-string body))))))))
 
-(defn abandon-execution [agt execution-id & {:keys [on-error on-success]}]
-  (http/post (str "http://" (:agent/host agt) ":" (:agent/port agt) "/job-execution/" execution-id "/abandon")
-             {:as :text
-              :body (pr-str)
-              :headers {"Content-Type" "application/edn"}}
-             (fn [{:keys [status headers body error]}]
-               (cond (and error on-error) (on-error error)
-                     on-success (on-success (edn/read-string body))))))
+(defn abandon-execution [execution-id & {:keys [on-error on-success]}]
+  (let [instance-id (some-> (model/pull '[{:job-execution/agent [:agent/instance-id]}] execution-id)
+                            (get-in [:job-execution/agent :agent/instance-id]))]
+    (when-let [agt (get @agents instance-id)]
+      (http/post (str "http://" (:agent/host agt) ":" (:agent/port agt) "/job-execution/" execution-id "/abandon")
+                 {:as :text
+                  :body (pr-str {})
+                  :headers {"Content-Type" "application/edn"}}
+                 (fn [{:keys [status headers body error]}]
+                   (cond (or (>= status 400) error) (when on-error (on-error error))
+                         on-success (on-success (edn/read-string body))))))))
 
 (defn update-execution [agt execution-id & {:keys [on-error on-success]}]
+  (log/debug "update-execution" execution-id agt)
   (http/get (str "http://" (:agent/host agt) ":" (:agent/port agt) "/job-execution/" execution-id)
             {:as :text
              :headers {"Content-Type" "application/edn"}}
             (fn [{:keys [status headers body error]}]
-              (cond (and error on-error) (on-error error)
+              (cond (or (>= status 400) error) (when on-error (on-error error))
                     on-success (on-success (edn/read-string body))))))
+
+(defn update-execution-by-id [id & {:keys [on-error on-success]}]
+  (let [job-execution (model/pull '[:job-execution/execution-id {:job-execution/agent [:agent/instance-id]}] id)
+        instance-id (get-in [:job-execution/agent :agent/instance-id] job-execution)]
+    (when-let [agt (get @agents instance-id)]
+      (update-execution agt (:job-execution/execution-id job-execution) :on-error on-error :on-success on-success))))
 
 (defn update-step-execution [agt execution-id step-execution-id & {:keys [on-error on-success]}]
   (http/get (str "http://" (:agent/host agt) ":" (:agent/port agt)
@@ -121,8 +135,7 @@
             {:as :text
              :headers {"Content-Type" "application/edn"}}
             (fn [{:keys [status headers body error]}]
-              (cond (and error on-error)
-                    (on-error error)
+              (cond (or (>= status 400) error) (when on-error (on-error error))
                     on-success (on-success (edn/read-string body))))))
 
 (defn available-agents []

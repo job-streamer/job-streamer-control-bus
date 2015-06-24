@@ -18,7 +18,8 @@
   (:use [clojure.core.async :only [chan put! <! go go-loop timeout]]
         [liberator.representation :only [ring-response]]
         [job-streamer.control-bus.api]
-        [ring.util.response :only [header]]))
+        [ring.util.response :only [header]])
+  (:gen-class))
 
 (defonce config (atom {}))
 
@@ -154,7 +155,11 @@
       (<! (timeout 2000))
       (recur)))
   (ag/start-monitor)
-  (recovery/update-job-status)
+  
+  (go-loop []
+    (<! (timeout 10000))
+    (recovery/update-job-status)
+    (recur))
 
   (server/run-server
    (-> app-routes
