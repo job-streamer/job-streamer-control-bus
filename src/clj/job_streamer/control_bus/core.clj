@@ -16,6 +16,7 @@
                                       (dispatcher :as dispatcher)
                                       (recovery :as recovery)))
   (:use [clojure.core.async :only [chan put! <! go go-loop timeout]]
+        [environ.core :only [env]]
         [liberator.representation :only [ring-response]]
         [job-streamer.control-bus.api]
         [ring.util.response :only [header]])
@@ -135,41 +136,42 @@
   (route/not-found {:content-type "application/edn"
                     :body "{:message \"not found\"}"}))
 
-(defn -main [& {:keys [port] :or {port 45102}}]
+(defn -main [& args]
   (init)
-  (broadcast/start port)
-  (go (scheduler/start "localhost" port)) 
-  (dispatcher/start)
-  (go
-    (let [applications (model/query '{:find [[(pull ?app [*])]]
-                                      :where [[?app :application/name]]})]
-      (doseq [app applications]
-        (apps/register (assoc app :name "default")))))
-  (go-loop []
-    (let [jobs (job/find-undispatched)]
-      (doseq [[execution-request job parameter] jobs]
-        (dispatcher/submit {:request-id execution-request
-                            :class-loader-id (:application/class-loader-id (apps/find-by-name "default"))
-                            :job job
-                            :parameters parameter}))
-      (<! (timeout 2000))
-      (recur)))
-  (ag/start-monitor)
-  
-  (go-loop []
-    (<! (timeout 10000))
-    (recovery/update-job-status)
-    (recur))
+  (let [port (Integer/parseInt (or (:control_bus-port env) "45102"))]
+    (broadcast/start port)
+    (go (scheduler/start "localhost" port))
+    (dispatcher/start)
+    (go
+      (let [applications (model/query '{:find [[(pull ?app [*])]]
+                                        :where [[?app :application/name]]})]
+        (doseq [app applications]
+          (apps/register (assoc app :name "default")))))
+    (go-loop []
+      (let [jobs (job/find-undispatched)]
+        (doseq [[execution-request job parameter] jobs]
+          (dispatcher/submit {:request-id execution-request
+                              :class-loader-id (:application/class-loader-id (apps/find-by-name "default"))
+                              :job job
+                              :parameters parameter}))
+        (<! (timeout 2000))
+        (recur)))
+    (ag/start-monitor)
 
-  (server/run-server
-   (-> app-routes
-       (wrap-defaults api-defaults)
-       (wrap-same-origin-policy)
-       wrap-reload)
-   :port port
-   :websockets [{:path "/join"
-                 :on-message (fn [ch message]
-                               (handle-command (edn/read-string message) ch))
-                 :on-close (fn [ch close-reason]
-                             (log/info "disconnect" ch "for" close-reason)
-                             (handle-command {:command :bye} ch))}]))
+    (go-loop []
+      (<! (timeout 10000))
+      (recovery/update-job-status)
+      (recur))
+
+    (server/run-server
+     (-> app-routes
+         (wrap-defaults api-defaults)
+         (wrap-same-origin-policy)
+         wrap-reload)
+     :port port
+     :websockets [{:path "/join"
+                   :on-message (fn [ch message]
+                                 (handle-command (edn/read-string message) ch))
+                   :on-close (fn [ch close-reason]
+                               (log/info "disconnect" ch "for" close-reason)
+                               (handle-command {:command :bye} ch))}])))
