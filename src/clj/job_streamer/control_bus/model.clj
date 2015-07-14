@@ -115,8 +115,8 @@
             [calendar :ref]))
    (schema calendar
            (fields
-            [name :string]
-            [weekly-holiday :boolean :many]
+            [name :string :unique-value :indexed]
+            [weekly-holiday :string]
             [holidays :instant :many]))])
 
 (defn generate-enums [& enums]
@@ -124,6 +124,7 @@
          (map #(s/get-enums (name (first %)) :db.part/user (second %)) enums)))
 
 (defn create-schema []
+  ;(d/delete-database uri)
   (d/create-database uri)
   (reset! conn (d/connect uri))
   (let [schema (concat

@@ -1,20 +1,24 @@
 (ns job-streamer.control-bus.scheduler
-  (:require [job-streamer.control-bus.model :as model]
-            [clojure.tools.logging :as log])
+  (:require [clojure.edn :as edn]
+            [clojure.tools.logging :as log]
+            [job-streamer.control-bus.model :as model])
   (:import [net.unit8.job_streamer.control_bus JobStreamerExecuteJob TimeKeeperJob]
            (org.quartz TriggerBuilder JobBuilder CronScheduleBuilder DateBuilder DateBuilder$IntervalUnit
                        TriggerKey TriggerUtils CronExpression
                        Trigger$TriggerState)
-           [org.quartz.impl StdSchedulerFactory]))
+           [org.quartz.impl StdSchedulerFactory]
+           [org.quartz.impl.calendar HolidayCalendar]))
 
 (defonce scheduler (atom nil))
 (defonce control-bus (atom {}))
 
-(defn- make-trigger [job-id cron-notation]
-  (.. (TriggerBuilder/newTrigger)
-      (withIdentity (str "trigger-" job-id))
-      (withSchedule (CronScheduleBuilder/cronSchedule cron-notation))
-      (build)))
+(defn- make-trigger [job-id cron-notation calendar-name]
+  (let [builder (.. (TriggerBuilder/newTrigger)
+                    (withIdentity (str "trigger-" job-id))
+                    (withSchedule (CronScheduleBuilder/cronSchedule cron-notation)))]
+    (when calendar-name
+      (.modifiedByCalendar builder calendar-name))
+    (.build builder)))
 
 (defn time-keeper [app-name job-name execution-id duration action]
   (let [trigger (.. (TriggerBuilder/newTrigger)
@@ -32,8 +36,8 @@
                       (build))]
     (.scheduleJob @scheduler job-deail trigger)))
 
-(defn schedule [job-id cron-notation]
-  (let [new-trigger (make-trigger job-id cron-notation)
+(defn schedule [job-id cron-notation calendar-name]
+  (let [new-trigger (make-trigger job-id cron-notation calendar-name)
         job (model/pull '[:job/name
                           {:job/schedule
                            [:db/id
@@ -53,14 +57,16 @@
     (if-let [trigger (.getTrigger @scheduler (TriggerKey. (str "trigger-" job-id)))]
       (do
         (.rescheduleJob @scheduler (.getKey trigger) new-trigger)
-        (model/transact [{:db/id (get-in job [:job/schedule :db/id])
-                          :schedule/cron-notation cron-notation
-                          :schedule/active? true}]))
+        (model/transact [(merge {:db/id (get-in job [:job/schedule :db/id])
+                                 :schedule/cron-notation cron-notation
+                                 :schedule/active? true}
+                                (when calendar-name {:schedule/calendar [:calendar/name calendar-name]})) ]))
       (do
         (.scheduleJob @scheduler job-detail new-trigger)
-        (model/transact [{:db/id #db/id[db.part/user -1]
-                          :schedule/cron-notation cron-notation
-                          :schedule/active? true}
+        (model/transact [(merge {:db/id #db/id[db.part/user -1]
+                                 :schedule/cron-notation cron-notation
+                                 :schedule/active? true}
+                                (when calendar-name {:schedule/calendar [:calendar/name calendar-name]}))
                          {:db/id job-id
                           :job/schedule #db/id[db.part/user -1]}])))))
 
@@ -97,17 +103,30 @@
 (defn validate-format [cron-notation]
   (CronExpression/validateExpression cron-notation))
 
+(defn add-calendar [calendar]
+  (let [holiday-calendar (HolidayCalendar.)]
+    (doseq [holiday (:calendar/holidays calendar)]
+      (.addExcludedDate holiday-calendar holiday))
+    (.addCalendar @scheduler (:calendar/name calendar) holiday-calendar false false)))
+
 (defn start [host port]
   (swap! control-bus assoc :host host :port (int port))
   (reset! scheduler (.getScheduler (StdSchedulerFactory.)))
+
+  (doseq [calendar (model/query '{:find [[(pull ?calendar [:*]) ...]]
+                                   :where [[?calendar :calendar/name]]})]
+    (add-calendar (update-in calendar [:calendar/weekly-holiday] edn/read-string)))
+
   (.start @scheduler)
   (log/info "started scheduler.")
-  (let [schedules (model/query '{:find [?job ?cron-notation]
-                                 :where [[?job :job/schedule ?schedule]
-                                         [?schedule :schedule/cron-notation ?cron-notation]]})]
-    (doseq [[job-id cron-notation] schedules]
-      (log/info "Recover schedule: " job-id cron-notation)
-      (schedule job-id cron-notation))))
+  (let [schedules (model/query '{:find [?job ?schedule]
+                                 :where [[?job :job/schedule ?schedule]]})]
+    (doseq [[job-id sched] schedules]
+      (let [s (model/pull '[:schedule/cron-notation {:schedule/calendar [:calendar/name]}] sched)]
+        (log/info "Recover schedule: " job-id)
+        (schedule job-id
+                  (:schedule/cron-notation s)
+                  (get-in s [:schedule/calendar :calendar/name]))))))
 
 (defn stop []
   (.shutdown @scheduler)

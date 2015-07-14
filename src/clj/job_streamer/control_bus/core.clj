@@ -116,7 +116,7 @@
   (ANY "/:app-name/stats" [app-name]
     (stats-resource app-name))
   (ANY ["/calendar/:cal-name" :cal-name #".*"] [cal-name]
-    (calendar-resource name))
+    (calendar-resource cal-name))
   (ANY "/calendars" [] calendars-resource)
   (ANY "/agents" [] ag/agents-resource)
   (ANY ["/agent/:instance-id/:cmd" :instance-id #"[A-Za-z0-9\-]+" :cmd #"\w+"]

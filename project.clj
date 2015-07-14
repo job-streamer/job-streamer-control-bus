@@ -1,5 +1,5 @@
 (defproject net.unit8.jobstreamer/job-streamer-control-bus (clojure.string/trim-newline (slurp "VERSION"))
-  :dependencies [[org.clojure/clojure "1.7.0-RC2"]
+  :dependencies [[org.clojure/clojure "1.7.0"]
                  [org.clojure/tools.logging "0.3.1"]
                  [org.clojure/core.async "0.1.346.0-17112a-alpha"]
                  [javax/javaee-api "7.0"]

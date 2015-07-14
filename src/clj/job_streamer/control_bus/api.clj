@@ -92,7 +92,8 @@
   :post! (fn [{job :edn}]
            (let [datoms (job/edn->datoms job nil)
                  job-id (:db/id (first datoms))]
-             
+             ;; 受け付ける形式をEDNだけでなく、Job XMLを受けれるようにする。
+             ;; TODO 同一APPで同一ジョブ名は、更新扱いとする。
              (model/transact (conj datoms
                                    [:db/add [:application/name app-name] :application/jobs job-id]))
              job))
@@ -292,8 +293,10 @@
   :malformed? #(parse-edn %)
   :exists? (fn [ctx]
              (:job/schedule (model/pull '[:job/schedule] job-id)))
-  :post! (fn [ctx]
-           (scheduler/schedule job-id (get-in ctx [:edn :schedule/cron-notation])))
+  :post! (fn [{schedule :edn}]
+           (scheduler/schedule job-id
+                               (:schedule/cron-notation schedule)
+                               (get-in schedule [:schedule/calendar :calendar/name])))
   :put! (fn [ctx]
           (case cmd
             :pause  (scheduler/pause job-id)
@@ -312,12 +315,20 @@
                          :calendar/name v/required)
   :post! (fn [{cal :edn}]
            (let [id (or (:db/id cal) (d/tempid :db.part/user))]
+             (scheduler/add-calendar (:calendar/name cal)
+                                     (:calendar/holidays cal)
+                                     (:clendar/weekly-holiday cal))
              (model/transact [{:db/id id
                                :calendar/name (:calendar/name cal)
                                :calendar/holidays (:calendar/holidays cal)
-                               :calendar/weekly-holiday (:calendar/weekly-holiday cal)}])))
+                               :calendar/weekly-holiday (pr-str (:calendar/weekly-holiday cal))}])))
   :handle-ok (fn [_]
-               []))
+               (->> (model/query '{:find [[(pull ?cal [:*]) ...]]
+                                   :in [$]
+                                   :where [[?cal :calendar/name]]})
+                    (map (fn [cal]
+                           (update-in cal [:calendar/weekly-holiday]
+                                      edn/read-string))))))
 
 (defresource calendar-resource [name]
   :available-media-types ["application/edn"]
@@ -326,11 +337,14 @@
           (model/transact [{:db/id [:calendar/name name]
                             :calendar/name (:calendar/name cal)
                             :calendar/holidays (:calendar/holidays cal)
-                            :calendar/weekly-holiday (:calendar/weekly-holiday cal)}]))
+                            :calendar/weekly-holiday (pr-str (:calendar/weekly-holiday cal))}]))
   :delete! (fn [ctx]
              (model/transact [[:db.fn/retractEntity [:calendar/name name]]]))
   :handle-ok (fn [ctx]
-               (model/query '{:find [?e .] :in [$ ?n] :where [[?e :calendar/name ?n]]} name)))
+               (-> (model/query '{:find [(pull ?e [:*]) .]
+                                   :in [$ ?n]
+                                   :where [[?e :calendar/name ?n]]} name)
+                   (update-in [:calendar/weekly-holiday] edn/read-string))))
 
 (defresource applications-resource
   :available-media-types ["application/edn"]
