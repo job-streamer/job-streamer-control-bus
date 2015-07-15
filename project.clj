@@ -13,7 +13,7 @@
                  [liberator "0.13"]
                  [compojure "1.3.4"]
                  [ring/ring-defaults "0.1.5"]
-                 [ring "1.3.2"]
+                 [ring "1.4.0"]
                  [http-kit "2.1.19"]
                  [ch.qos.logback/logback-classic "1.1.3"]
                  [org.jboss.weld.se/weld-se "2.2.7.Final"]
@@ -36,6 +36,8 @@
          :init    job-streamer.control-bus.core/init}
   :aot :all
   :pom-plugins [[org.apache.maven.plugins/maven-assembly-plugin "2.5.5"
-                 {:configuration [:descriptors [:descriptor "src/assembly/dist.xml"]]}]]
+                 {:configuration [:descriptors [:descriptor "src/assembly/dist.xml"]]}]
+                [org.apache.maven.plugins/maven-compiler-plugin "3.3"
+                 {:configuration ([:source "1.7"] [:target "1.7"]) }]]
 
   :profiles {:test {:dependencies [[junit "4.12"]]}})

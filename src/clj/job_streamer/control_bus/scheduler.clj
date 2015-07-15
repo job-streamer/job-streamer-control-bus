@@ -2,12 +2,11 @@
   (:require [clojure.edn :as edn]
             [clojure.tools.logging :as log]
             [job-streamer.control-bus.model :as model])
-  (:import [net.unit8.job_streamer.control_bus JobStreamerExecuteJob TimeKeeperJob]
+  (:import [net.unit8.job_streamer.control_bus JobStreamerExecuteJob TimeKeeperJob HolidayAndWeeklyCalendar]
            (org.quartz TriggerBuilder JobBuilder CronScheduleBuilder DateBuilder DateBuilder$IntervalUnit
                        TriggerKey TriggerUtils CronExpression
                        Trigger$TriggerState)
-           [org.quartz.impl StdSchedulerFactory]
-           [org.quartz.impl.calendar HolidayCalendar]))
+           [org.quartz.impl StdSchedulerFactory]))
 
 (defonce scheduler (atom nil))
 (defonce control-bus (atom {}))
@@ -104,9 +103,10 @@
   (CronExpression/validateExpression cron-notation))
 
 (defn add-calendar [calendar]
-  (let [holiday-calendar (HolidayCalendar.)]
+  (let [holiday-calendar (HolidayAndWeeklyCalendar.)]
     (doseq [holiday (:calendar/holidays calendar)]
       (.addExcludedDate holiday-calendar holiday))
+    (.setDaysExcluded holiday-calendar (boolean-array (:calendar/weekly-holiday calendar)))
     (.addCalendar @scheduler (:calendar/name calendar) holiday-calendar false false)))
 
 (defn start [host port]
