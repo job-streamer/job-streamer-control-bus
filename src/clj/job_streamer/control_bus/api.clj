@@ -73,45 +73,6 @@
                      :job-execution/batch-status {:db/ident :batch-status/registered}}) schedules)))
     executions))
 
-(defresource stats-resource [app-name]
-    :available-media-types ["application/edn"]
-    :allowed-methods [:get]
-    :handle-ok (fn [ctx]
-                 {:agents (count (ag/available-agents))
-                  :jobs   (or (model/query '{:find [(count ?job) .]
-                                            :in [$ ?app-name]
-                                            :where [[?app :application/name ?app-name]
-                                                    [?app :application/jobs ?job]]}
-                                          app-name) 0)}))
-
-(defresource jobs-resource [app-name]
-  :available-media-types ["application/edn"]
-  :allowed-methods [:get :post]
-  :malformed? #(validate (parse-edn %)
-                         :job/name [v/required [v/matches #"^[\w\-]+$"]])
-  :post! (fn [{job :edn}]
-           (let [datoms (job/edn->datoms job nil)
-                 job-id (:db/id (first datoms))]
-             ;; 受け付ける形式をEDNだけでなく、Job XMLを受けれるようにする。
-             ;; TODO 同一APPで同一ジョブ名は、更新扱いとする。
-             (model/transact (conj datoms
-                                   [:db/add [:application/name app-name] :application/jobs job-id]))
-             job))
-  :handle-ok (fn [{{{query :q :keys [limit offset]} :params} :request}]
-               (let [jobs (job/find-all app-name query
-                                       (to-int offset 0)
-                                       (to-int limit 20))]
-                 (update-in jobs [:results]
-                            #(->> %
-                                  (map (fn [{job-name :job/name
-                                             executions :job/executions
-                                             schedule :job/schedule :as job}]
-                                         {:job/name job-name
-                                          :job/executions (append-schedule (:db/id job) executions schedule)
-                                          :job/latest-execution (find-latest-execution executions)
-                                          :job/next-execution   (find-next-execution job)}))
-                                  vec)))))
-
 (defn extract-job-parameters [job]
   (->> (edn/read-string (:job/edn-notation job))
        (tree-seq coll? seq)
@@ -128,6 +89,71 @@
                   (map second)))
        (flatten)
        (apply hash-set)))
+
+(defresource stats-resource [app-name]
+    :available-media-types ["application/edn"]
+    :allowed-methods [:get]
+    :handle-ok (fn [ctx]
+                 {:agents (count (ag/available-agents))
+                  :jobs   (or (model/query '{:find [(count ?job) .]
+                                            :in [$ ?app-name]
+                                            :where [[?app :application/name ?app-name]
+                                                    [?app :application/jobs ?job]]}
+                                          app-name) 0)}))
+
+(defresource jobs-resource [app-name]
+  :available-media-types ["application/edn"]
+  :allowed-methods [:get :post]
+  :malformed? #(validate (parse-edn %)
+                         :job/name [v/required [v/matches #"^[\w\-]+$"]])
+  :exists? (fn [{{job-name :job/name} :edn :as ctx}]
+             (if (#{:post} (get-in ctx [:request :request-method]))
+               (when-let [[_ job-id] (job/find-by-name app-name job-name)]
+                 {:job-id job-id})
+               true))
+  :post! (fn [{job :edn job-id :job-id}]
+           (let [datoms (job/edn->datoms job job-id)
+                 job-id (:db/id (first datoms))]
+             ;; 受け付ける形式をEDNだけでなく、Job XMLを受けれるようにする。
+             (model/transact (conj datoms
+                                   [:db/add [:application/name app-name] :application/jobs job-id]))
+             job))
+  :handle-ok (fn [{{{query :q with-param :with :keys [limit offset]} :params} :request}]
+               (let [jobs (job/find-all app-name query
+                                        (to-int offset 0)
+                                        (to-int limit 20))
+                     with-params (->> (clojure.string/split (or (not-empty with-param) "execution")
+                                                            #"\s*,\s*")
+                                      (map keyword)
+                                      set) ]
+                 (update-in jobs [:results]
+                            #(->> %
+                                  (map (fn [{job-name :job/name
+                                             executions :job/executions
+                                             schedule :job/schedule :as job}]
+                                         (merge {:job/name job-name}
+                                                (when (with-params :execution)
+                                                  {:job/executions (append-schedule (:db/id job) executions schedule)
+                                                   :job/latest-execution (find-latest-execution executions)
+                                                   :job/next-execution   (find-next-execution job)})
+                                                (when (with-params :schedule)
+                                                  {:job/schedule schedule})
+                                                (when (with-params :notation)
+                                                  {:job/edn-notation (:job/edn-notation job)})
+                                                (when (with-params :settings)
+                                                  (merge {:job/exclusive? (get job :job/exclusive? false)}
+                                                         (when-let [time-monitor (get-in job [:job/time-monitor :db/id])]
+                                                           {:job/time-monitor (model/pull '[:time-monitor/duration
+                                                                                            {:time-monitor/action [:db/ident]}
+                                                                                            :time-monitor/notification-type] time-monitor)})
+                                                         (when-let [status-notifications (:job/status-notifications job)]
+                                                           {:job/status-notifications (->> status-notifications
+                                                                                           (map (fn [sn]
+                                                                                                  (model/pull '[{:status-notification/batch-status [:db/ident]}
+                                                                                                                :status-notification/type] (:db/id sn))))
+                                                                                           vec)}))))))
+                                  vec)))))
+
 
 (defresource job-resource [app-name job-name]
   :available-media-types ["application/edn"]
@@ -266,15 +292,33 @@
 (defresource execution-resource [id & [cmd]]
   :available-media-types ["application/edn"]
   :allowed-methods [:get :put]
-  :put! (fn [ctx]
+  
+  :exists? (fn [ctx]
+             (when-let [execution (model/pull '[:* {:job-execution/agent [:agent/instance-id]}] id)]
+               {:execution execution})) 
+  :put! (fn [{execution :execution}]
           (case cmd
-            :abandon (let [execution (model/pull '[:job-execution/execution-id] id)] 
-                       (ag/stop-execution (:job-execution/execution-id execution)
-                                          :on-success #(ag/update-execution id)))
+            :abandon (ag/abandon-execution execution
+                                           :on-success (fn [_]
+                                                         (ag/update-execution-by-id
+                                                          id
+                                                          :on-success (fn [response]
+                                                                        (job/save-execution id response))
+                                                          :on-error (fn [error]
+                                                                      (log/error error)))))
 
-            :stop (let [execution (model/pull '[:job-execution/execution-id] id)] 
-                       (ag/stop-execution (:job-execution/execution-id execution)
-                                          :on-success #(ag/update-execution id)))
+            :stop (ag/stop-execution execution
+                                     :on-success (fn [_]
+                                                   (ag/update-execution-by-id
+                                                    id
+                                                    :on-success (fn [response]
+                                                                  (job/save-execution id response)))))
+            :restart (ag/restart-execution execution
+                                     :on-success (fn [_]
+                                                   (ag/update-execution-by-id
+                                                    id
+                                                    :on-success (fn [response]
+                                                                  (job/save-execution id response)))))
             
             :alert (let [job (model/query '{:find [(pull ?job [:job/name
                                                                {:job/time-monitor
@@ -333,8 +377,10 @@
 (defresource calendar-resource [name]
   :available-media-types ["application/edn"]
   :allowed-methods [:get :put :delete]
+  :malformed? #(validate (parse-edn %)
+                         :calendar/name v/required)
   :put! (fn [{cal :edn}]
-          (model/transact [{:db/id [:calendar/name name]
+          (model/transact [{:db/id (:db/id cal)
                             :calendar/name (:calendar/name cal)
                             :calendar/holidays (:calendar/holidays cal)
                             :calendar/weekly-holiday (pr-str (:calendar/weekly-holiday cal))}]))
@@ -378,8 +424,13 @@
   :available-media-types ["application/edn"]
   :allowed-methods [:get]
   :handle-ok (fn [ctx]
-               (->> (model/query '{:find [?c .]
+               (let [in-app (->> (model/query '{:find [?c .]
                                  :in [$ ?app-name]
                                  :where [[?c :batch-component/application ?app]
                                          [?app :application/name ?app-name]]} app-name)
-                    (model/pull '[:*]))))
+                                 (model/pull '[:*]))
+                     builtins {:batch-component/batchlet ["org.jobstreamer.batch.ShellBatchlet"]
+                               :batch-component/item-writer []
+                               :batch-component/item-processor []
+                               :batch-component/item-reader []}]
+                 (merge-with #(vec (concat %1 %2))  builtins in-app))))

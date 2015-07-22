@@ -53,6 +53,8 @@
                                                       [?execution :job-execution/agent ?agt]
                                                       [?agt :agent/instance-id ?instance-id]]} (UUID/fromString instance-id))
                                  (map #(apply merge %))
+                                 (sort-by :job-execution/create-time #(compare %2 %1))
+                                 (take 20)
                                  vec))
                      (dissoc :agent/channel)))))
 
@@ -89,11 +91,11 @@
                      (when on-error (on-error status error)) 
                      on-success (on-success (edn/read-string body))))))
 
-(defn stop-execution [execution-id & {:keys [on-error on-success]}]
-  (let [instance-id (some-> (model/pull '[{:job-execution/agent [:agent/instance-id]}] execution-id)
-                            (get-in [:job-execution/agent :agent/instance-id]))]
+(defn stop-execution [execution & {:keys [on-error on-success]}]
+  (let [instance-id (get-in execution [:job-execution/agent :agent/instance-id])]
     (when-let [agt (get @agents instance-id)]
-      (http/post (str "http://" (:agent/host agt) ":" (:agent/port agt) "/job-execution/" execution-id "/stop")
+      (http/put (str "http://" (:agent/host agt) ":" (:agent/port agt)
+                      "/job-execution/" (:job-execution/execution-id execution) "/stop")
                  {:as :text
                   :body (pr-str {})
                   :headers {"Content-Type" "application/edn"}}
@@ -101,13 +103,26 @@
                    (cond (or (>= status 400) error) (when on-error (on-error error))
                          on-success (on-success (edn/read-string body))))))))
 
-(defn abandon-execution [execution-id & {:keys [on-error on-success]}]
-  (let [instance-id (some-> (model/pull '[{:job-execution/agent [:agent/instance-id]}] execution-id)
-                            (get-in [:job-execution/agent :agent/instance-id]))]
-    (when-let [agt (get @agents instance-id)]
-      (http/post (str "http://" (:agent/host agt) ":" (:agent/port agt) "/job-execution/" execution-id "/abandon")
+(defn abandon-execution [execution & {:keys [on-error on-success]}]
+  (let [instance-id (get-in execution [:job-execution/agent :agent/instance-id])]
+    (if-let [agt (get @agents instance-id)]
+      (http/put (str "http://" (:agent/host agt) ":" (:agent/port agt)
+                      "/job-execution/" (:job-execution/execution-id execution) "/abandon")
                  {:as :text
                   :body (pr-str {})
+                  :headers {"Content-Type" "application/edn"}}
+                 (fn [{:keys [status headers body error]}]
+                   (cond (or (>= status 400) error) (when on-error (on-error error))
+                         on-success (on-success (edn/read-string body)))))
+      (model/transact [{:db/id (:db/id execution) :job-execution/batch-status :batch-status/abandoned}]))))
+
+(defn restart-execution [execution & {:keys [on-error on-success]}]
+  (let [instance-id (get-in execution [:job-execution/agent :agent/instance-id])]
+    (when-let [agt (get @agents instance-id)]
+      (http/put (str "http://" (:agent/host agt) ":" (:agent/port agt)
+                      "/job-execution/" (:job-execution/execution-id execution) "/restart")
+                 {:as :text
+                  :body (pr-str {:parameters {}})
                   :headers {"Content-Type" "application/edn"}}
                  (fn [{:keys [status headers body error]}]
                    (cond (or (>= status 400) error) (when on-error (on-error error))
@@ -124,7 +139,7 @@
 
 (defn update-execution-by-id [id & {:keys [on-error on-success]}]
   (let [job-execution (model/pull '[:job-execution/execution-id {:job-execution/agent [:agent/instance-id]}] id)
-        instance-id (get-in [:job-execution/agent :agent/instance-id] job-execution)]
+        instance-id (get-in job-execution [:job-execution/agent :agent/instance-id])]
     (when-let [agt (get @agents instance-id)]
       (update-execution agt (:job-execution/execution-id job-execution) :on-error on-error :on-success on-success))))
 

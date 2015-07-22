@@ -133,7 +133,8 @@
   [job job-id]
   (let [datoms (atom [])
         step-refs (doall
-                   (for [step (:job/steps job)]
+                   (for [step (->> (:job/components job)
+                                   (filter #(find % :step/name)))]
                        (let [id (d/tempid :db.part/user)]
                          (swap! datoms conj
                                 (merge
@@ -145,10 +146,15 @@
                                    (let [batchlet-id (d/tempid :db.part/user)]
                                      (swap! datoms conj {:db/id batchlet-id :batchlet/ref (:batchlet/ref batchlet)})
                                      {:step/batchlet batchlet-id}))))
-                         id)))]
-    
-    (into [{:db/id (or job-id (d/tempid :db.part/user)) 
-            :job/name (:job/name job)
-            :job/restartable? (or (:job/restartable? job) true) 
-            :job/edn-notation (pr-str job)
-            :job/steps step-refs}] @datoms)))
+                         id)))
+        job-id (or job-id (d/tempid :db.part/user)) ]
+    (concat [{:db/id job-id
+              :job/name (:job/name job)
+              :job/restartable? (get job :job/restartable? true) 
+              :job/edn-notation (pr-str job)
+              :job/steps step-refs
+              :job/exclusive? (get job :job/exclusive? false)}]
+            (when-let [time-monitor (:job/time-monitor job)]
+              [(assoc time-monitor :db/id #db/id[db.part/user -1])
+               [:db/add job-id :job/time-monitor #db/id[db.part/user -1]]])
+            @datoms)))

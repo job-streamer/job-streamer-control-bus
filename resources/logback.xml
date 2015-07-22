@@ -10,13 +10,17 @@
     <uri>datomic:free://localhost:4334/job-streamer</uri>
   </appender>
 
-  <logger name="datomic" level="warn"/>
-  <logger name="job-streamer.control-bus" level="debug"/>
-  <logger name="net.unit8" level="info"/>
+  <logger name="datomic" level="WARN"/>
+  <logger name="job-streamer.control-bus" level="DEBUG"/>
+  <logger name="net.unit8" level="INFO"/>
 
-  <logger name="example">
+  <logger name="org.jobstreamer.batch" level="INFO">
     <appender-ref ref="datomic"/>
   </logger>
+  <logger name="example" level="INFO">
+    <appender-ref ref="datomic"/>
+  </logger>
+
 
   <root level="info">
     <appender-ref ref="STDOUT"/>
