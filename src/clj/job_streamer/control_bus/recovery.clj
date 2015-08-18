@@ -1,8 +1,8 @@
 (ns job-streamer.control-bus.recovery
   (:require [clojure.tools.logging :as log]
             (job-streamer.control-bus (model :as model)
-                                         (agent :as ag)
-                                         (job :as job))))
+                                      (agent :as ag)
+                                      (job :as job))))
 
 (defn update-job-status []
   (let [execution-ids (model/query '{:find [[?execution ...]]

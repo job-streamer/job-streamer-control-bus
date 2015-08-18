@@ -19,8 +19,14 @@
       (.modifiedByCalendar builder calendar-name))
     (.build builder)))
 
-(defn time-keeper [app-name job-name execution-id duration action]
-  (let [trigger (.. (TriggerBuilder/newTrigger)
+(defn time-keeper [execution-id duration action]
+  (let [[app-name job-name] (model/query '{:find [[?app-name ?job-name]]
+                                           :in [$ ?execution-id]
+                                           :where [[?app :application/name ?app-name]
+                                                   [?app :application/jobs ?job]
+                                                   [?job :job/name ?job-name]
+                                                   [?job :job/executions ?execution-id]]} execution-id)
+        trigger (.. (TriggerBuilder/newTrigger)
                     (startAt (DateBuilder/futureDate duration DateBuilder$IntervalUnit/MINUTE))
                     (build))
         job-deail (.. (JobBuilder/newJob)

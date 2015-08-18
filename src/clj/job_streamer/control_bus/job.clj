@@ -2,7 +2,8 @@
   (:require [datomic.api :as d]
             [clojure.tools.logging :as log]
             (job-streamer.control-bus (model :as model)
-                                      (notification :as notification))))
+                                      (notification :as notification)))
+  (:import [org.jsoup Jsoup]))
 
 (defn find-undispatched []
   (model/query
@@ -36,15 +37,23 @@
     {:results (->> jobs
                    (drop (dec offset))
                    (take limit)
-                   (map #(model/pull '[:*
-                                       {:job/executions
-                                        [:db/id
-                                         :job-execution/create-time
-                                         :job-execution/start-time
-                                         :job-execution/end-time
-                                         {:job-execution/batch-status [:db/ident]}]}
-                                       {:job/schedule
-                                        [:db/id :schedule/cron-notation :schedule/active?]}] (first %)))
+                   (map #(->> (first %)
+                              (model/pull '[:*
+                                            {(limit :job/executions 99999)
+                                             [:db/id
+                                              :job-execution/create-time
+                                              :job-execution/start-time
+                                              :job-execution/end-time
+                                              :job-execution/exit-status
+                                              {:job-execution/batch-status [:db/ident]}]}
+                                            {:job/schedule
+                                             [:db/id :schedule/cron-notation :schedule/active?]}])))
+                   (map (fn [job]
+                          (update-in job [:job/executions]
+                                     (fn [executions]
+                                       (->> executions
+                                            (sort-by :job-execution/create-time #(compare %2 %1))
+                                            (take 100)))) ))
                    vec)
      :hits   (count jobs)
      :offset offset
@@ -68,6 +77,7 @@
                                        :job-execution/start-time
                                        :job-execution/end-time
                                        :job-execution/job-parameters
+                                       :job-execution/exit-status
                                        {:job-execution/batch-status [:db/ident]
                                         :job-execution/agent
                                         [:agent/instance-id :agent/name]}] (first %)))
@@ -110,19 +120,25 @@
 
 (defn save-execution [id execution]
   (log/debug "progress update: " id execution)
-  (let [notifications (some-> (model/query '{:find [(pull ?job [{:job/status-notifications
-                                                                 [{:status-notification/batch-status [:db/ident]}
-                                                                  :status-notification/type]}]) .]
-                                             :in [$ ?id]
-                                             :where [[?job :job/executions ?id]]} id)
-                              :job/status-notifications)]
-    (->> notifications
-         (filter #(= (get-in % [:status-notification/batch-status :db/ident]) (:batch-status execution)))
+  (let [job (model/query '{:find [(pull ?job [:job/name
+                                              {:job/steps [:step/name]}
+                                              {:job/status-notifications
+                                               [{:status-notification/batch-status [:db/ident]}
+                                                :status-notification/exit-status
+                                                :status-notification/type]}]) .]
+                           :in [$ ?id]
+                           :where [[?job :job/executions ?id]]} id)]
+    (->> (:job/status-notifications job)
+         (filter #(or (= (get-in % [:status-notification/batch-status :db/ident])
+                         (:batch-status execution))
+                      (= (:status-notification/exit-status %) (:exit-status execution))))
          (map #(notification/send (:status-notification/type %)
-                                  execution))
+                                  (assoc execution :job-name (:job/name job))))
          doall))
   (model/transact [(merge {:db/id id
                            :job-execution/batch-status (:batch-status execution)}
+                          (when-let [exit-status (:exit-status execution)]
+                            {:job-execution/exit-status exit-status})
                           (when-let [start-time (:start-time execution)]
                             {:job-execution/start-time start-time})
                           (when-let [end-time (:end-time execution)]
@@ -158,3 +174,79 @@
               [(assoc time-monitor :db/id #db/id[db.part/user -1])
                [:db/add job-id :job/time-monitor #db/id[db.part/user -1]]])
             @datoms)))
+
+(declare xml->components)
+
+(defn xml->batchlet [batchlet]
+  (merge {}
+         (when-let [ref (not-empty (.attr batchlet "ref"))]
+           {:batchlet/ref ref})))
+
+(defn xml->chunk [chunk]
+  (merge {}
+         (when-let [checkpoint-policy (not-empty (.attr chunk "checkpoint-policy"))]
+           {:chunk/checkpoint-policy checkpoint-policy})
+         (when-let [item-count (not-empty (.attr chunk "item-count"))]
+           {:chunk/item-count item-count})
+         (when-let [time-limit (not-empty (.attr chunk "time-limit"))]
+           {:chunk/time-limit time-limit})
+         (when-let [skip-limit (not-empty (.attr chunk "skip-limit"))]
+           {:chunk/skip-limit skip-limit})
+         (when-let [retry-limit (not-empty (.attr chunk "retry-limit"))]
+           {:chunk/retry-limit retry-limit})
+         (when-let [item-reader (first (. chunk select "> reader[ref]"))]
+           {:chunk/reader {:reader/ref (.attr item-reader "ref")}})
+         (when-let [item-processor (first (. chunk select "> processor[ref]"))]
+           {:chunk/processor {:processor/ref (.attr item-processor "ref")}})
+         (when-let [item-writer (first (. chunk select "> writer[ref]"))]
+           {:chunk/writer {:writer/ref (.attr item-writer "ref")}})))
+
+(defn xml->step [step]
+  (merge {}
+         (when-let [id (.attr step "id")]
+           {:step/name id})
+         (when-let [start-limit (not-empty (.attr step "start-limit"))]
+           {:step/start-limit start-limit})
+         (when-let [allow-start-if-complete (not-empty (.attr step "allow-start-if-complete"))]
+           {:step/allow-start-if-complete? allow-start-if-complete})
+         (when-let [next (not-empty (.attr step "next"))]
+           {:step/next next})
+         (when-let [chunk (first (. step select "> chunk"))]
+           {:step/chunk (xml->chunk chunk)})
+         (when-let [batchlet (first (. step select "> batchlet"))]
+           {:step/batchlet (xml->batchlet batchlet)})))
+
+(defn xml->flow [flow]
+  (merge {}
+         (when-let [id (.attr flow "id")]
+           {:flow/name id})
+         (when-let [next (not-empty (.attr flow "next"))]
+           {:flow/next next})
+         (when-let [components (not-empty (.select flow "> step"))]
+           {:flow/components (xml->components components)})))
+
+(defn xml->split [split]
+  (merge {}
+         (when-let [id (.attr split "id")]
+           {:split/name id})
+         (when-let [split (not-empty (.attr split "next"))]
+           {:split/next next})
+         (when-let [components (not-empty (.select split "> flow"))]
+           {:split/components (xml->components components)})))
+
+(defn xml->components [job]
+  (->> (for [component (. job select "> step,flow,split,decision")]
+         (case (.tagName component)
+           "step" (xml->step component)
+           "flow" (xml->flow component)
+           "split" (xml->split component)
+           "decision" (throw (Exception. "Unsupported `decision`"))))
+       vec))
+
+(defn xml->edn
+  "Convert a format from XML to edn."
+  [xml]
+  (let [doc (Jsoup/parse xml)
+        job (. doc select "job")]
+    {:job/name (.attr job "id")
+     :job/components (xml->components job)}))

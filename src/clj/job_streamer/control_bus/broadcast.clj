@@ -1,12 +1,12 @@
 (ns job-streamer.control-bus.broadcast
   (:require [clojure.tools.logging :as log]
             [clojure.java.io :as io]
+            [environ.core :refer [env]]
             [org.httpkit.client :as http])
-  (:use [environ.core :only [env]])
   (:import [java.nio.channels DatagramChannel Selector SelectionKey]
            [java.nio ByteBuffer]
            [java.io ByteArrayInputStream DataInputStream]
-           [java.net InetSocketAddress InetAddress NetworkInterface]))
+           [java.net InetSocketAddress InetAddress NetworkInterface StandardSocketOptions]))
 
 (defn- create-channel [port]
   (let [channel (DatagramChannel/open)]
@@ -15,6 +15,20 @@
       (.setReuseAddress true)
       (.bind (InetSocketAddress. port)))
     (.configureBlocking channel false)
+    (log/info "Listen broadcast messages from agents at " port)
+    channel))
+
+(defn- create-multicast-channel [address port]
+  (let [channel (DatagramChannel/open)]
+    (doto channel
+      (.configureBlocking false)
+      (.setOption StandardSocketOptions/SO_REUSEADDR true))
+    (.. channel socket (bind (InetSocketAddress. port)))
+
+    (doseq [interface (enumeration-seq (NetworkInterface/getNetworkInterfaces))]
+      (.setOption channel StandardSocketOptions/IP_MULTICAST_IF interface)
+      (.join channel address interface))
+    (log/info "Listen mulicast messages from agents at " address ":" port)
     channel))
 
 (defn- read-agent-addresses [buf]
@@ -69,7 +83,10 @@
 
 (defn start [ws-port]
   (future
-    (let [channel (create-channel (or (env :control-bus-port) 45100))
+    (let [port (Integer/parseInt (or (:discovery-port env) "45100"))
+          channel (if-let [address (:discovery-address env)]
+                    (create-multicast-channel (InetAddress/getByName address) port)
+                    (create-channel port))
           selector (Selector/open)]
       (.register channel selector SelectionKey/OP_READ)
       (loop [key-num (.select selector)]

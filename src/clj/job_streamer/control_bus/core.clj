@@ -6,7 +6,6 @@
             [ring.middleware.defaults :refer [wrap-defaults  api-defaults]]
             [ring.middleware.reload :refer [wrap-reload]]
             (job-streamer.control-bus (model :as model)
-                                      (notification :as notification)
                                       (job :as job)
                                       (apps :as apps)
                                       (agent :as ag)
@@ -67,6 +66,7 @@
                      (log/debug "progress-step !" id)
                      (model/transact [{:db/id id
                                        :step-execution/batch-status (step-execution :batch-status)
+                                       :step-execution/exit-status  (step-execution :exit-status)
                                        :step-execution/start-time (step-execution :start-time)
                                        :step-execution/end-time (step-execution :end-time)}]))
                    (log/warn "Not found a step execution.  instance-id=" instance-id

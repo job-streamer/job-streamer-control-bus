@@ -59,6 +59,7 @@
    (schema status-notification
            (fields
             [batch-status :ref]
+            [exit-status  :string]
             [type :string]))
    (schema step
            (fields
@@ -88,6 +89,7 @@
             [end-time    :instant]
             [job-parameters :string]
             [batch-status :ref]
+            [exit-status :string]
             [agent :ref]
             [execution-id :long]
             [step-executions :ref :many]))
@@ -98,6 +100,7 @@
             [start-time :instant]
             [end-time   :instant]
             [batch-status :ref]
+            [exit-status :string]
             [execution-exception :string]))
    (schema execution-log
            (fields

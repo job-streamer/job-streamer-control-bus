@@ -35,12 +35,14 @@
       java.lang.String body
       (slurp (io/reader body)))))
 
-(defn- parse-edn [context]
+(defn- parse-body [context]
   (when (#{:put :post} (get-in context [:request :request-method]))
     (try
       (if-let [body (body-as-string context)]
-        (let [data (edn/read-string body)]
-          [false {:edn data}])
+        (case (get-in context [:request :content-type])
+          "application/edn" [false {:edn (edn/read-string body)}]
+          "application/xml" [false {:edn (job/xml->edn body)}]
+          false)
         false)
       (catch Exception e
         (log/error e "fail to parse edn.")
@@ -104,7 +106,7 @@
 (defresource jobs-resource [app-name]
   :available-media-types ["application/edn"]
   :allowed-methods [:get :post]
-  :malformed? #(validate (parse-edn %)
+  :malformed? #(validate (parse-body %)
                          :job/name [v/required [v/matches #"^[\w\-]+$"]])
   :exists? (fn [{{job-name :job/name} :edn :as ctx}]
              (if (#{:post} (get-in ctx [:request :request-method]))
@@ -114,7 +116,6 @@
   :post! (fn [{job :edn job-id :job-id}]
            (let [datoms (job/edn->datoms job job-id)
                  job-id (:db/id (first datoms))]
-             ;; 受け付ける形式をEDNだけでなく、Job XMLを受けれるようにする。
              (model/transact (conj datoms
                                    [:db/add [:application/name app-name] :application/jobs job-id]))
              job))
@@ -150,6 +151,7 @@
                                                            {:job/status-notifications (->> status-notifications
                                                                                            (map (fn [sn]
                                                                                                   (model/pull '[{:status-notification/batch-status [:db/ident]}
+                                                                                                                :status-notification/exit-status
                                                                                                                 :status-notification/type] (:db/id sn))))
                                                                                            vec)}))))))
                                   vec)))))
@@ -158,7 +160,7 @@
 (defresource job-resource [app-name job-name]
   :available-media-types ["application/edn"]
   :allowed-methods [:get :put :delete]
-  :malformed? #(parse-edn %)
+  :malformed? #(parse-body %)
   :exists? (when-let [[app-id job-id] (job/find-by-name app-name job-name)]
              {:app-id app-id
               :job-id job-id})
@@ -170,10 +172,12 @@
                               [:db/retract app-id :application/jobs job-id]]))
   :handle-ok (fn [ctx]
                (let [job (model/pull '[:*
-                                       {:job/executions
-                                        [:job-execution/start-time
+                                       {(limit :job/executions 99999)
+                                        [:db/id
+                                         :job-execution/start-time
                                          :job-execution/end-time
                                          :job-execution/create-time
+                                         :job-execution/exit-status
                                          {:job-execution/batch-status [:db/ident]}
                                          {:job-execution/agent [:agent/name :agent/instance-id]}]}
                                        {:job/schedule [:schedule/cron-notation :schedule/active?]}]
@@ -197,7 +201,7 @@
                                    success))]
                  (-> job
                      (assoc :job/stats {:total total :success success :failure failure :average average}
-                            :job/latest-execution (find-latest-execution (:job/executions job)) 
+                            :job/latest-execution (find-latest-execution (:job/executions job))
                             :job/next-execution   (find-next-execution job)
                             :job/dynamic-parameters (extract-job-parameters job))
                      (dissoc :job/executions)))))
@@ -205,7 +209,7 @@
 (defresource job-settings-resource [app-name job-name & [cmd]]
   :available-media-types ["application/edn"]
   :allowed-methods [:get :delete :put]
-  :malformed? #(parse-edn %)
+  :malformed? #(parse-body %)
   :exists? (when-let [[app-id job-id] (job/find-by-name app-name job-name)]
              {:app-id app-id
               :job-id job-id}) 
@@ -214,10 +218,17 @@
             :exclusive (model/transact [{:db/id job-id :job/exclusive? true}])
             :status-notification (if-let [id (:db/id settings)]
                                    (model/transact [[:db/retract job-id :job/status-notifications id]])
-                                   (model/transact [[:db/add job-id :job/status-notifications #db/id[db.part/user -1]]
-                                                    {:db/id #db/id[db.part/user -1]
-                                                     :status-notification/batch-status (:status-notification/batch-status settings)
-                                                     :status-notification/type         (:status-notification/type settings)}]))
+                                   (let [status-notification-id (d/tempid :db.part/user)
+                                         tempids (-> (model/transact
+                                                      [[:db/add job-id :job/status-notifications status-notification-id]
+                                                       (merge {:db/id status-notification-id
+                                                               :status-notification/type (:status-notification/type settings)}
+                                                              (when-let [batch-status (:status-notification/batch-status settings)]
+                                                                {:status-notification/batch-status batch-status})
+                                                              (when-let [exit-status (:status-notification/exit-status settings)]
+                                                                {:status-notification/exit-status exit-status}))])
+                                                     :tempids)]
+                                     {:db/id (model/resolve-tempid tempids status-notification-id)}))
             :time-monitor (model/transact [(merge {:db/id #db/id[db.part/user -1]} settings)
                                            {:db/id job-id :job/time-monitor #db/id[db.part/user -1]}])))
   :delete! (fn [{settings :edn job-id :job-id}]
@@ -228,6 +239,8 @@
                                                                 :db/id)]
                                (model/transact [[:db/retract job-id :job/time-monitor time-monitor-id]
                                                 [:db.fn/retractEntity time-monitor-id]]))))
+  :handle-created (fn [ctx]
+                    (select-keys ctx [:db/id]))
   :handle-ok (fn [ctx]
                (let [settings (model/pull '[:job/exclusive?
                                             {:job/time-monitor
@@ -236,7 +249,8 @@
                                               :time-monitor/notification-type]}
                                             {:job/status-notifications
                                              [:db/id
-                                              {:status-notification/batch-status [:db/ident]} 
+                                              {:status-notification/batch-status [:db/ident]}
+                                              :status-notification/exit-status
                                               :status-notification/type]}] (:job-id ctx))]
                  settings)))
 
@@ -251,7 +265,7 @@
                       :tempids)]
       (when-let [time-monitor (model/pull '[{:job/time-monitor [:time-monitor/duration
                                                                 {:time-monitor/action [:db/ident]}]}] job-id)]
-        (scheduler/time-keeper app-name job-name (model/resolve-tempid tempids execution-id)
+        (scheduler/time-keeper (model/resolve-tempid tempids execution-id)
                                (get-in time-monitor [:job/time-monitor :time-monitor/duration])
                                (get-in time-monitor [:job/time-monitor :time-monitor/action :db/ident]))))))
 
@@ -260,7 +274,7 @@
 (defresource executions-resource [app-name job-name]
   :available-media-types ["application/edn"]
   :allowed-methods [:get :post]
-  :malformed? #(parse-edn %)
+  :malformed? #(parse-body %)
   :exists? (when-let [[app-id job-id] (job/find-by-name app-name job-name)]
              {:job (model/pull '[:job/exclusive?
                                  {:job/executions
@@ -292,11 +306,14 @@
 (defresource execution-resource [id & [cmd]]
   :available-media-types ["application/edn"]
   :allowed-methods [:get :put]
-  
+  :malformed? #(parse-body %)
   :exists? (fn [ctx]
-             (when-let [execution (model/pull '[:* {:job-execution/agent [:agent/instance-id]}] id)]
-               {:execution execution})) 
-  :put! (fn [{execution :execution}]
+             (when-let [execution (model/pull '[:* {:job-execution/agent [:db/id :agent/instance-id]}] id)]
+               (when-let [job-id (model/query '{:find [?job .]
+                                                :in [$ ?eid]
+                                                :where [[?job :job/executions ?eid]]} id)]
+                 {:execution execution :job-id job-id})))
+  :put! (fn [{parameters :edn execution :execution job-id :job-id}]
           (case cmd
             :abandon (ag/abandon-execution execution
                                            :on-success (fn [_]
@@ -313,12 +330,31 @@
                                                     id
                                                     :on-success (fn [response]
                                                                   (job/save-execution id response)))))
-            :restart (ag/restart-execution execution
-                                     :on-success (fn [_]
-                                                   (ag/update-execution-by-id
-                                                    id
-                                                    :on-success (fn [response]
-                                                                  (job/save-execution id response)))))
+            :restart (let [execution-id (d/tempid :db.part/user)
+                           tempids (-> (model/transact [{:db/id execution-id
+                                                         :job-execution/batch-status :batch-status/unknown
+                                                         :job-execution/create-time (java.util.Date.)
+                                                         :job-execution/agent (:job-execution/agent execution)
+                                                         :job-execution/job-parameters (pr-str (or parameters {}))}
+                                                        [:db/add job-id :job/executions execution-id]])
+                                       :tempids)
+                           new-id (model/resolve-tempid tempids execution-id)]
+                       (when-let [time-monitor (model/pull '[{:job/time-monitor [:time-monitor/duration
+                                                                                 {:time-monitor/action [:db/ident]}]}] job-id)]
+                         (scheduler/time-keeper new-id
+                                                (get-in time-monitor [:job/time-monitor :time-monitor/duration])
+                                                (get-in time-monitor [:job/time-monitor :time-monitor/action :db/ident])))
+                       (ag/restart-execution execution
+                                             :on-success (fn [resp]
+                                                           (model/transact [{:db/id new-id
+                                                                             :job-execution/execution-id (:execution-id resp)
+                                                                             :job-execution/batch-status (:batch-status resp)
+                                                                             :job-execution/start-time   (:start-time   resp)}])
+                                                           (ag/update-execution-by-id
+                                                            new-id
+                                                            :on-success (fn [new-exec]
+                                                                          (job/save-execution new-id new-exec))))))
+            
             
             :alert (let [job (model/query '{:find [(pull ?job [:job/name
                                                                {:job/time-monitor
@@ -326,7 +362,8 @@
                                             :in [$ ?id]
                                             :where [[?job :job/executions ?id]]} id)]
                      (notification/send (get-in job [:job/time-monitor :time-monitor/notification-type])
-                                        {:job/name (:job/name job)}))
+                                        {:job-name (:job/name job)
+                                         :duration (get-in job [:job/time-monitor :time-monitor/duration])}))
             nil))
   :handle-ok (fn [ctx]
                (job/find-execution id)))
@@ -334,7 +371,7 @@
 (defresource schedule-resource [job-id & [cmd]]
   :available-media-types ["application/edn"]
   :allowed-methods [:post :put :delete]
-  :malformed? #(parse-edn %)
+  :malformed? #(parse-body %)
   :exists? (fn [ctx]
              (:job/schedule (model/pull '[:job/schedule] job-id)))
   :post! (fn [{schedule :edn}]
@@ -355,7 +392,7 @@
 (defresource calendars-resource
   :available-media-types ["application/edn"]
   :allowed-methods [:get :post]
-  :malformed? #(validate (parse-edn %)
+  :malformed? #(validate (parse-body %)
                          :calendar/name v/required)
   :post! (fn [{cal :edn}]
            (let [id (or (:db/id cal) (d/tempid :db.part/user))]
@@ -377,7 +414,7 @@
 (defresource calendar-resource [name]
   :available-media-types ["application/edn"]
   :allowed-methods [:get :put :delete]
-  :malformed? #(validate (parse-edn %)
+  :malformed? #(validate (parse-body %)
                          :calendar/name v/required)
   :put! (fn [{cal :edn}]
           (model/transact [{:db/id (:db/id cal)
@@ -395,7 +432,7 @@
 (defresource applications-resource
   :available-media-types ["application/edn"]
   :allowed-methods [:get :post]
-  :malformed? #(validate (parse-edn %)
+  :malformed? #(validate (parse-body %)
                          :application/name v/required
                          :application/description v/required
                          :application/classpaths v/required) 

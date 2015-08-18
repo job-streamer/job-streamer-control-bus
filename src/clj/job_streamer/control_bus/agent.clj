@@ -6,7 +6,8 @@
             [org.httpkit.client :as http]
             [clojure.tools.logging :as log]
             (job-streamer.control-bus [model :as model]
-                                      [rrd :as rrd]))
+                                      [rrd :as rrd]
+                                      [apps :as apps]))
   (:import [java.util UUID]
            [java.io ByteArrayInputStream]))
 
@@ -122,7 +123,8 @@
       (http/put (str "http://" (:agent/host agt) ":" (:agent/port agt)
                       "/job-execution/" (:job-execution/execution-id execution) "/restart")
                  {:as :text
-                  :body (pr-str {:parameters {}})
+                  :body (pr-str {:parameters {}
+                                 :class-loader-id (:application/class-loader-id (apps/find-by-name "default"))})
                   :headers {"Content-Type" "application/edn"}}
                  (fn [{:keys [status headers body error]}]
                    (cond (or (>= status 400) error) (when on-error (on-error error))
