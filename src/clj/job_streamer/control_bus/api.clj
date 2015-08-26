@@ -252,7 +252,16 @@
                                               {:status-notification/batch-status [:db/ident]}
                                               :status-notification/exit-status
                                               :status-notification/type]}] (:job-id ctx))]
-                 settings)))
+                 (-> settings
+                     (update-in [:job/status-notifications]
+                            (fn [notifications]
+                              (map #(assoc %
+                                           :status-notification/batch-status
+                                           (get-in % [:status-notification/batch-status :db/ident])) notifications)))
+                     (update-in [:job/time-monitor]
+                                (fn [time-monitor]
+                                  (when-let [action (get-in time-monitor [:time-monitor/action :db/ident])]
+                                    (assoc time-monitor :time-monitor/action action))))))))
 
 (defn- execute-job [app-name job-name ctx]  
   (when-let [[app-id job-id] (job/find-by-name app-name job-name)]
@@ -396,9 +405,7 @@
                          :calendar/name v/required)
   :post! (fn [{cal :edn}]
            (let [id (or (:db/id cal) (d/tempid :db.part/user))]
-             (scheduler/add-calendar (:calendar/name cal)
-                                     (:calendar/holidays cal)
-                                     (:clendar/weekly-holiday cal))
+             (scheduler/add-calendar cal)
              (model/transact [{:db/id id
                                :calendar/name (:calendar/name cal)
                                :calendar/holidays (:calendar/holidays cal)

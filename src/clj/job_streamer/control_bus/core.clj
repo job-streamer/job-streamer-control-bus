@@ -136,6 +136,13 @@
   (route/not-found {:content-type "application/edn"
                     :body "{:message \"not found\"}"}))
 
+(def banner "
+    __     _   _____ _                 Control Bus
+ __|  |___| |_|   __| |_ ___ ___ ___ _____ ___ ___ 
+|  |  | . | . |__   |  _|  _| -_| .'|     | -_|  _|
+|_____|___|___|_____|_| |_| |___|__,|_|_|_|___|_|
+")
+
 (defn -main [& args]
   (init)
   (let [port (Integer/parseInt (or (:control_bus-port env) "45102"))]
@@ -174,4 +181,6 @@
                                  (handle-command (edn/read-string message) ch))
                    :on-close (fn [ch close-reason]
                                (log/info "disconnect" ch "for" close-reason)
-                               (handle-command {:command :bye} ch))}])))
+                               (handle-command {:command :bye} ch))}])
+
+    (println banner)))
