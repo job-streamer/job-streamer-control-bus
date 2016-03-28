@@ -115,6 +115,9 @@
     (.setDaysExcluded holiday-calendar (boolean-array (:calendar/weekly-holiday calendar)))
     (.addCalendar @scheduler (:calendar/name calendar) holiday-calendar false false)))
 
+(defn delete-calendar[calendar-name]
+  (.deleteCalendar @scheduler calendar-name))
+
 (defn start [host port]
   (swap! control-bus assoc :host host :port (int port))
   (reset! scheduler (.getScheduler (StdSchedulerFactory.)))

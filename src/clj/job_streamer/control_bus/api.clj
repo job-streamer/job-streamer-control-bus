@@ -5,6 +5,7 @@
             [clojure.tools.logging :as log]
             [liberator.core :refer [defresource]]
             [datomic.api :as d]
+            [bouncer.core :as b]
             [bouncer.validators :as v]
             (job-streamer.control-bus (model :as model)
                                       (apps :as apps)
@@ -91,6 +92,16 @@
                   (map second)))
        (flatten)
        (apply hash-set)))
+
+(defn calendar-is-not-already-used-by-job?[calendar-name]
+  (nil? (model/query
+          '{:find [(count ?job) .]
+            :in [$ ?calendar-name]
+            :where [[?job :job/schedule ?schedule]
+                    [?schedule :schedule/calendar ?calendar]
+                    [?calendar :calendar/name ?calendar-name]]} calendar-name)))
+(defn forced-true?[calendar-name]
+  false)
 
 (defresource stats-resource [app-name]
   :available-media-types ["application/edn"]
@@ -411,80 +422,91 @@
                                  :where [[?calendar :calendar/name ?calendar-name]]}
                                (:calendar/name cal))]
                (model/transact [{:db/id old-id
-                                   :calendar/name (:calendar/name cal)
-                                   :calendar/holidays (:calendar/holidays cal)
-                                   :calendar/weekly-holiday (pr-str (:calendar/weekly-holiday cal))}])
+                                 :calendar/name (:calendar/name cal)
+                                 :calendar/holidays (:calendar/holidays cal)
+                                 :calendar/weekly-holiday (pr-str (:calendar/weekly-holiday cal))}])
                (do
                  (scheduler/add-calendar cal)
                  (model/transact [{:db/id id
                                    :calendar/name (:calendar/name cal)
                                    :calendar/holidays (:calendar/holidays cal)
                                    :calendar/weekly-holiday (pr-str (:calendar/weekly-holiday cal))}])))))
-           :handle-ok (fn [_]
-                        (->> (model/query '{:find [[(pull ?cal [:*]) ...]]
-                                            :in [$]
-                                            :where [[?cal :calendar/name]]})
-                             (map (fn [cal]
-                                    (update-in cal [:calendar/weekly-holiday]
-                                               edn/read-string))))))
+  :handle-ok (fn [_]
+               (->> (model/query '{:find [[(pull ?cal [:*]) ...]]
+                                   :in [$]
+                                   :where [[?cal :calendar/name]]})
+                    (map (fn [cal]
+                           (update-in cal [:calendar/weekly-holiday]
+                                      edn/read-string))))))
 
-  (defresource calendar-resource [name]
-    :available-media-types ["application/edn"]
-    :allowed-methods [:get :put :delete]
-    :malformed? #(validate (parse-body %)
-                           :calendar/name v/required)
-    :put! (fn [{cal :edn}]
-            (model/transact [{:db/id (:db/id cal)
-                              :calendar/name (:calendar/name cal)
-                              :calendar/holidays (:calendar/holidays cal)
-                              :calendar/weekly-holiday (pr-str (:calendar/weekly-holiday cal))}]))
-    :delete! (fn [ctx]
-               (model/transact [[:db.fn/retractEntity [:calendar/name name]]]))
-    :handle-ok (fn [ctx]
-                 (-> (model/query '{:find [(pull ?e [:*]) .]
-                                    :in [$ ?n]
-                                    :where [[?e :calendar/name ?n]]} name)
-                     (update-in [:calendar/weekly-holiday] edn/read-string))))
+(defresource calendar-resource [name]
+  :available-media-types ["application/edn"]
+  :allowed-methods [:get :put :delete]
+  :malformed? (fn [ctx](or (validate (parse-body ctx)
+                                     :calendar/name v/required)
+                           (and (#{:delete} (get-in ctx [:request :request-method]))
+                                (if-let [errors (first
+                                                  (b/validate {:name name}
+                                                              :name [[calendar-is-not-already-used-by-job? :message "This calendar is already used by some job."]]))]
+                                  (do
+                                    {:message (->> errors
+                                                   (postwalk #(if (map? %) (vals %) %))
+                                                   flatten
+                                                   first)})))))
+  :put! (fn [{cal :edn}]
+          (model/transact [{:db/id (:db/id cal)
+                            :calendar/name (:calendar/name cal)
+                            :calendar/holidays (:calendar/holidays cal)
+                            :calendar/weekly-holiday (pr-str (:calendar/weekly-holiday cal))}]))
+  :delete! (fn [ctx]
+             (scheduler/delete-calendar name)
+             (model/transact [[:db.fn/retractEntity [:calendar/name name]]]))
+  :handle-ok (fn [ctx]
+               (-> (model/query '{:find [(pull ?e [:*]) .]
+                                  :in [$ ?n]
+                                  :where [[?e :calendar/name ?n]]} name)
+                   (update-in [:calendar/weekly-holiday] edn/read-string))))
 
-  (defresource applications-resource
-    :available-media-types ["application/edn"]
-    :allowed-methods [:get :post]
-    :malformed? #(validate (parse-body %)
-                           :application/name v/required
-                           :application/description v/required
-                           :application/classpaths v/required)
-    :post! (fn [{app :edn}]
-             (if-let [app-id (model/query '[:find ?e . :in $ ?n :where [?e :application/name ?n]] "default")]
-               (model/transact [{:db/id app-id
-                                 :application/description (:application/description app)
-                                 :application/classpaths (:application/classpaths app)}])
-               (model/transact [{:db/id #db/id[db.part/user -1]
-                                 :application/name "default" ;; Todo multi applications.
-                                 :application/description (:application/description app)
-                                 :application/classpaths (:application/classpaths app)}]))
-             (apps/register (assoc app :application/name "default"))
-             (when-let [components (apps/scan-components (:application/classpaths app))]
-               (let [batch-component-id (model/query '{:find [?c .]
-                                                       :in [$ ?app-name]
-                                                       :where [[?c :batch-component/application ?app]
-                                                               [?app :application/name ?app-name]]} "default")]
-                 (model/transact [(merge {:db/id (or batch-component-id (d/tempid :db.part/user))
-                                          :batch-component/application [:application/name "default"]}
-                                         components)]))))
-    :handle-ok (fn [ctx]
-                 (vals @apps/applications)))
 
-  (defresource batch-components-resource [app-name]
-    :available-media-types ["application/edn"]
-    :allowed-methods [:get]
-    :handle-ok (fn [ctx]
-                 (let [in-app (->> (model/query '{:find [?c .]
-                                                  :in [$ ?app-name]
-                                                  :where [[?c :batch-component/application ?app]
-                                                          [?app :application/name ?app-name]]} app-name)
-                                   (model/pull '[:*]))
-                       builtins {:batch-component/batchlet ["org.jobstreamer.batch.ShellBatchlet"]
-                                 :batch-component/item-writer []
-                                 :batch-component/item-processor []
-                                 :batch-component/item-reader []}]
-                   (merge-with #(vec (concat %1 %2))  builtins in-app))))
+(defresource applications-resource
+  :available-media-types ["application/edn"]
+  :allowed-methods [:get :post]
+  :malformed? #(validate (parse-body %)
+                         :application/name v/required
+                         :application/description v/required
+                         :application/classpaths v/required)
+  :post! (fn [{app :edn}]
+           (if-let [app-id (model/query '[:find ?e . :in $ ?n :where [?e :application/name ?n]] "default")]
+             (model/transact [{:db/id app-id
+                               :application/description (:application/description app)
+                               :application/classpaths (:application/classpaths app)}])
+             (model/transact [{:db/id #db/id[db.part/user -1]
+                               :application/name "default" ;; Todo multi applications.
+                               :application/description (:application/description app)
+                               :application/classpaths (:application/classpaths app)}]))
+           (apps/register (assoc app :application/name "default"))
+           (when-let [components (apps/scan-components (:application/classpaths app))]
+             (let [batch-component-id (model/query '{:find [?c .]
+                                                     :in [$ ?app-name]
+                                                     :where [[?c :batch-component/application ?app]
+                                                             [?app :application/name ?app-name]]} "default")]
+               (model/transact [(merge {:db/id (or batch-component-id (d/tempid :db.part/user))
+                                        :batch-component/application [:application/name "default"]}
+                                       components)]))))
+  :handle-ok (fn [ctx]
+               (vals @apps/applications)))
+
+(defresource batch-components-resource [app-name]
+  :available-media-types ["application/edn"]
+  :allowed-methods [:get]
+  :handle-ok (fn [ctx]
+               (let [in-app (->> (model/query '{:find [?c .]
+                                                :in [$ ?app-name]
+                                                :where [[?c :batch-component/application ?app]
+                                                        [?app :application/name ?app-name]]} app-name)
+                                 (model/pull '[:*]))
+                     builtins {:batch-component/batchlet ["org.jobstreamer.batch.ShellBatchlet"]
+                               :batch-component/item-writer []
+                               :batch-component/item-processor []
+                               :batch-component/item-reader []}]
+                 (merge-with #(vec (concat %1 %2))  builtins in-app))))
