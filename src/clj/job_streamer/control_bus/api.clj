@@ -59,7 +59,7 @@
 
 (defn- find-next-execution
   "Find next execution from a scheduler.
-   If a job isn't scheduled, it returns nil."
+  If a job isn't scheduled, it returns nil."
   [job]
   (when (:job/schedule job)
     (if-let [next-start (first (scheduler/fire-times (:db/id job)))]
@@ -93,15 +93,15 @@
        (apply hash-set)))
 
 (defresource stats-resource [app-name]
-    :available-media-types ["application/edn"]
-    :allowed-methods [:get]
-    :handle-ok (fn [ctx]
-                 {:agents (count (ag/available-agents))
-                  :jobs   (or (model/query '{:find [(count ?job) .]
-                                            :in [$ ?app-name]
-                                            :where [[?app :application/name ?app-name]
-                                                    [?app :application/jobs ?job]]}
-                                          app-name) 0)}))
+  :available-media-types ["application/edn"]
+  :allowed-methods [:get]
+  :handle-ok (fn [ctx]
+               {:agents (count (ag/available-agents))
+                :jobs   (or (model/query '{:find [(count ?job) .]
+                                           :in [$ ?app-name]
+                                           :where [[?app :application/name ?app-name]
+                                                   [?app :application/jobs ?job]]}
+                                         app-name) 0)}))
 
 (defresource jobs-resource [app-name]
   :available-media-types ["application/edn"]
@@ -181,10 +181,10 @@
                                          {:job-execution/batch-status [:db/ident]}
                                          {:job-execution/agent [:agent/name :agent/instance-id]}]}
                                        {:job/schedule [:schedule/cron-notation :schedule/active?]}]
-                              (:job-id ctx))
+                                     (:job-id ctx))
                      total (count (:job/executions job))
                      success (->> (:job/executions job)
-                                  (filter #(= (get-in % [:job-execution/batch-status :db/ident]) 
+                                  (filter #(= (get-in % [:job-execution/batch-status :db/ident])
                                               :batch-status/completed))
                                   count)
                      failure (->> (:job/executions job)
@@ -192,18 +192,18 @@
                                               :batch-status/failed))
                                   count)
                      average (if (= success 0) 0
-                                 (/ (->> (:job/executions job)
-                                             (filter #(= (get-in % [:job-execution/batch-status :db/ident])
-                                                         :batch-status/completed))
-                                             (map #(- (.getTime (:job-execution/end-time %))
-                                                      (.getTime (:job-execution/start-time %))))
-                                             (reduce +))
-                                   success))]
+                               (/ (->> (:job/executions job)
+                                       (filter #(= (get-in % [:job-execution/batch-status :db/ident])
+                                                   :batch-status/completed))
+                                       (map #(- (.getTime (:job-execution/end-time %))
+                                                (.getTime (:job-execution/start-time %))))
+                                       (reduce +))
+                                  success))]
                  (-> job
                      (assoc :job/stats {:total total :success success :failure failure :average average}
-                            :job/latest-execution (find-latest-execution (:job/executions job))
-                            :job/next-execution   (find-next-execution job)
-                            :job/dynamic-parameters (extract-job-parameters job))
+                       :job/latest-execution (find-latest-execution (:job/executions job))
+                       :job/next-execution   (find-next-execution job)
+                       :job/dynamic-parameters (extract-job-parameters job))
                      (dissoc :job/executions)))))
 
 (defresource job-settings-resource [app-name job-name & [cmd]]
@@ -212,7 +212,7 @@
   :malformed? #(parse-body %)
   :exists? (when-let [[app-id job-id] (job/find-by-name app-name job-name)]
              {:app-id app-id
-              :job-id job-id}) 
+              :job-id job-id})
   :put! (fn [{settings :edn job-id :job-id}]
           (case cmd
             :exclusive (model/transact [{:db/id job-id :job/exclusive? true}])
@@ -220,13 +220,13 @@
                                    (model/transact [[:db/retract job-id :job/status-notifications id]])
                                    (let [status-notification-id (d/tempid :db.part/user)
                                          tempids (-> (model/transact
-                                                      [[:db/add job-id :job/status-notifications status-notification-id]
-                                                       (merge {:db/id status-notification-id
-                                                               :status-notification/type (:status-notification/type settings)}
-                                                              (when-let [batch-status (:status-notification/batch-status settings)]
-                                                                {:status-notification/batch-status batch-status})
-                                                              (when-let [exit-status (:status-notification/exit-status settings)]
-                                                                {:status-notification/exit-status exit-status}))])
+                                                       [[:db/add job-id :job/status-notifications status-notification-id]
+                                                        (merge {:db/id status-notification-id
+                                                                :status-notification/type (:status-notification/type settings)}
+                                                               (when-let [batch-status (:status-notification/batch-status settings)]
+                                                                 {:status-notification/batch-status batch-status})
+                                                               (when-let [exit-status (:status-notification/exit-status settings)]
+                                                                 {:status-notification/exit-status exit-status}))])
                                                      :tempids)]
                                      {:db/id (model/resolve-tempid tempids status-notification-id)}))
             :time-monitor (model/transact [(merge {:db/id #db/id[db.part/user -1]} settings)
@@ -245,7 +245,7 @@
                (let [settings (model/pull '[:job/exclusive?
                                             {:job/time-monitor
                                              [:time-monitor/duration
-                                              {:time-monitor/action [:db/ident]} 
+                                              {:time-monitor/action [:db/ident]}
                                               :time-monitor/notification-type]}
                                             {:job/status-notifications
                                              [:db/id
@@ -263,13 +263,13 @@
                                   (when-let [action (get-in time-monitor [:time-monitor/action :db/ident])]
                                     (assoc time-monitor :time-monitor/action action))))))))
 
-(defn- execute-job [app-name job-name ctx]  
+(defn- execute-job [app-name job-name ctx]
   (when-let [[app-id job-id] (job/find-by-name app-name job-name)]
     (let [execution-id (d/tempid :db.part/user)
           tempids (-> (model/transact [{:db/id execution-id
-                                       :job-execution/batch-status :batch-status/undispatched
-                                       :job-execution/create-time (java.util.Date.)
-                                       :job-execution/job-parameters (pr-str (or (:edn ctx) {}))}
+                                        :job-execution/batch-status :batch-status/undispatched
+                                        :job-execution/create-time (java.util.Date.)
+                                        :job-execution/job-parameters (pr-str (or (:edn ctx) {}))}
                                        [:db/add job-id :job/executions execution-id]])
                       :tempids)]
       (when-let [time-monitor (model/pull '[{:job/time-monitor [:time-monitor/duration
@@ -291,7 +291,7 @@
                                    {:job-execution/batch-status [:db/ident]}]}] job-id)})
   :post-to-existing? (fn [ctx]
                        (when (#{:put :post} (get-in ctx [:request :request-method]))
-                         (not (:job/exclusive? (:job ctx)))))  
+                         (not (:job/exclusive? (:job ctx)))))
   :put-to-existing? (fn [ctx]
                       (#{:put :post} (get-in ctx [:request :request-method])))
   :conflict? (fn [{job :job}]
@@ -303,7 +303,7 @@
                               :batch-status/starting
                               :batch-status/started
                               :batch-status/stopping}
-                            (get-in last-execution [:job-execution/batch-status :db/ident])) 
+                            (get-in last-execution [:job-execution/batch-status :db/ident]))
                  false))
   :put!  #(execute-job app-name job-name %)
   :post! #(execute-job app-name job-name %)
@@ -327,18 +327,18 @@
             :abandon (ag/abandon-execution execution
                                            :on-success (fn [_]
                                                          (ag/update-execution-by-id
-                                                          id
-                                                          :on-success (fn [response]
-                                                                        (job/save-execution id response))
-                                                          :on-error (fn [error]
-                                                                      (log/error error)))))
+                                                           id
+                                                           :on-success (fn [response]
+                                                                         (job/save-execution id response))
+                                                           :on-error (fn [error]
+                                                                       (log/error error)))))
 
             :stop (ag/stop-execution execution
                                      :on-success (fn [_]
                                                    (ag/update-execution-by-id
-                                                    id
-                                                    :on-success (fn [response]
-                                                                  (job/save-execution id response)))))
+                                                     id
+                                                     :on-success (fn [response]
+                                                                   (job/save-execution id response)))))
             :restart (let [execution-id (d/tempid :db.part/user)
                            tempids (-> (model/transact [{:db/id execution-id
                                                          :job-execution/batch-status :batch-status/unknown
@@ -360,11 +360,11 @@
                                                                              :job-execution/batch-status (:batch-status resp)
                                                                              :job-execution/start-time   (:start-time   resp)}])
                                                            (ag/update-execution-by-id
-                                                            new-id
-                                                            :on-success (fn [new-exec]
-                                                                          (job/save-execution new-id new-exec))))))
-            
-            
+                                                             new-id
+                                                             :on-success (fn [new-exec]
+                                                                           (job/save-execution new-id new-exec))))))
+
+
             :alert (let [job (model/query '{:find [(pull ?job [:job/name
                                                                {:job/time-monitor
                                                                 [:time-monitor/notification-type]}]) .]
@@ -405,76 +405,86 @@
                          :calendar/name v/required)
   :post! (fn [{cal :edn}]
            (let [id (or (:db/id cal) (d/tempid :db.part/user))]
-             (scheduler/add-calendar cal)
-             (model/transact [{:db/id id
-                               :calendar/name (:calendar/name cal)
-                               :calendar/holidays (:calendar/holidays cal)
-                               :calendar/weekly-holiday (pr-str (:calendar/weekly-holiday cal))}])))
-  :handle-ok (fn [_]
-               (->> (model/query '{:find [[(pull ?cal [:*]) ...]]
-                                   :in [$]
-                                   :where [[?cal :calendar/name]]})
-                    (map (fn [cal]
-                           (update-in cal [:calendar/weekly-holiday]
-                                      edn/read-string))))))
+             (if-let [old-id (model/query
+                               '{:find [?calendar .]
+                                 :in [$ ?calendar-name]
+                                 :where [[?calendar :calendar/name ?calendar-name]]}
+                               (:calendar/name cal))]
+               (model/transact [{:db/id old-id
+                                   :calendar/name (:calendar/name cal)
+                                   :calendar/holidays (:calendar/holidays cal)
+                                   :calendar/weekly-holiday (pr-str (:calendar/weekly-holiday cal))}])
+               (do
+                 (scheduler/add-calendar cal)
+                 (model/transact [{:db/id id
+                                   :calendar/name (:calendar/name cal)
+                                   :calendar/holidays (:calendar/holidays cal)
+                                   :calendar/weekly-holiday (pr-str (:calendar/weekly-holiday cal))}])))))
+           :handle-ok (fn [_]
+                        (->> (model/query '{:find [[(pull ?cal [:*]) ...]]
+                                            :in [$]
+                                            :where [[?cal :calendar/name]]})
+                             (map (fn [cal]
+                                    (update-in cal [:calendar/weekly-holiday]
+                                               edn/read-string))))))
 
-(defresource calendar-resource [name]
-  :available-media-types ["application/edn"]
-  :allowed-methods [:get :put :delete]
-  :malformed? #(validate (parse-body %)
-                         :calendar/name v/required)
-  :put! (fn [{cal :edn}]
-          (model/transact [{:db/id (:db/id cal)
-                            :calendar/name (:calendar/name cal)
-                            :calendar/holidays (:calendar/holidays cal)
-                            :calendar/weekly-holiday (pr-str (:calendar/weekly-holiday cal))}]))
-  :delete! (fn [ctx]
-             (model/transact [[:db.fn/retractEntity [:calendar/name name]]]))
-  :handle-ok (fn [ctx]
-               (-> (model/query '{:find [(pull ?e [:*]) .]
-                                   :in [$ ?n]
-                                   :where [[?e :calendar/name ?n]]} name)
-                   (update-in [:calendar/weekly-holiday] edn/read-string))))
+  (defresource calendar-resource [name]
+    :available-media-types ["application/edn"]
+    :allowed-methods [:get :put :delete]
+    :malformed? #(validate (parse-body %)
+                           :calendar/name v/required)
+    :put! (fn [{cal :edn}]
+            (model/transact [{:db/id (:db/id cal)
+                              :calendar/name (:calendar/name cal)
+                              :calendar/holidays (:calendar/holidays cal)
+                              :calendar/weekly-holiday (pr-str (:calendar/weekly-holiday cal))}]))
+    :delete! (fn [ctx]
+               (model/transact [[:db.fn/retractEntity [:calendar/name name]]]))
+    :handle-ok (fn [ctx]
+                 (-> (model/query '{:find [(pull ?e [:*]) .]
+                                    :in [$ ?n]
+                                    :where [[?e :calendar/name ?n]]} name)
+                     (update-in [:calendar/weekly-holiday] edn/read-string))))
 
-(defresource applications-resource
-  :available-media-types ["application/edn"]
-  :allowed-methods [:get :post]
-  :malformed? #(validate (parse-body %)
-                         :application/name v/required
-                         :application/description v/required
-                         :application/classpaths v/required) 
-  :post! (fn [{app :edn}]
-           (if-let [app-id (model/query '[:find ?e . :in $ ?n :where [?e :application/name ?n]] "default")] 
-             (model/transact [{:db/id app-id
-                               :application/description (:application/description app)
-                               :application/classpaths (:application/classpaths app)}])
-             (model/transact [{:db/id #db/id[db.part/user -1]
-                             :application/name "default" ;; Todo multi applications.
-                             :application/description (:application/description app)
-                             :application/classpaths (:application/classpaths app)}]))
-           (apps/register (assoc app :application/name "default"))
-           (when-let [components (apps/scan-components (:application/classpaths app))]
-             (let [batch-component-id (model/query '{:find [?c .]
-                                                     :in [$ ?app-name]
-                                                     :where [[?c :batch-component/application ?app]
-                                                             [?app :application/name ?app-name]]} "default")]
-               (model/transact [(merge {:db/id (or batch-component-id (d/tempid :db.part/user))
-                                        :batch-component/application [:application/name "default"]}
-                                       components)]))))
-  :handle-ok (fn [ctx]
-               (vals @apps/applications)))
+  (defresource applications-resource
+    :available-media-types ["application/edn"]
+    :allowed-methods [:get :post]
+    :malformed? #(validate (parse-body %)
+                           :application/name v/required
+                           :application/description v/required
+                           :application/classpaths v/required)
+    :post! (fn [{app :edn}]
+             (if-let [app-id (model/query '[:find ?e . :in $ ?n :where [?e :application/name ?n]] "default")]
+               (model/transact [{:db/id app-id
+                                 :application/description (:application/description app)
+                                 :application/classpaths (:application/classpaths app)}])
+               (model/transact [{:db/id #db/id[db.part/user -1]
+                                 :application/name "default" ;; Todo multi applications.
+                                 :application/description (:application/description app)
+                                 :application/classpaths (:application/classpaths app)}]))
+             (apps/register (assoc app :application/name "default"))
+             (when-let [components (apps/scan-components (:application/classpaths app))]
+               (let [batch-component-id (model/query '{:find [?c .]
+                                                       :in [$ ?app-name]
+                                                       :where [[?c :batch-component/application ?app]
+                                                               [?app :application/name ?app-name]]} "default")]
+                 (model/transact [(merge {:db/id (or batch-component-id (d/tempid :db.part/user))
+                                          :batch-component/application [:application/name "default"]}
+                                         components)]))))
+    :handle-ok (fn [ctx]
+                 (vals @apps/applications)))
 
-(defresource batch-components-resource [app-name]
-  :available-media-types ["application/edn"]
-  :allowed-methods [:get]
-  :handle-ok (fn [ctx]
-               (let [in-app (->> (model/query '{:find [?c .]
-                                 :in [$ ?app-name]
-                                 :where [[?c :batch-component/application ?app]
-                                         [?app :application/name ?app-name]]} app-name)
-                                 (model/pull '[:*]))
-                     builtins {:batch-component/batchlet ["org.jobstreamer.batch.ShellBatchlet"]
-                               :batch-component/item-writer []
-                               :batch-component/item-processor []
-                               :batch-component/item-reader []}]
-                 (merge-with #(vec (concat %1 %2))  builtins in-app))))
+  (defresource batch-components-resource [app-name]
+    :available-media-types ["application/edn"]
+    :allowed-methods [:get]
+    :handle-ok (fn [ctx]
+                 (let [in-app (->> (model/query '{:find [?c .]
+                                                  :in [$ ?app-name]
+                                                  :where [[?c :batch-component/application ?app]
+                                                          [?app :application/name ?app-name]]} app-name)
+                                   (model/pull '[:*]))
+                       builtins {:batch-component/batchlet ["org.jobstreamer.batch.ShellBatchlet"]
+                                 :batch-component/item-writer []
+                                 :batch-component/item-processor []
+                                 :batch-component/item-reader []}]
+                   (merge-with #(vec (concat %1 %2))  builtins in-app))))
