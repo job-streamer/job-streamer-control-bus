@@ -5,13 +5,13 @@
 
 (defn validate [m & forms]
   (if (sequential? m)
-    (if-let [data (:edn (second m))] 
+    (if-let [data (:edn (second m))]
       (if-let [errors (first
                        (apply b/validate data forms))]
-        {:message (->> errors
+        {:message {:messages (->> errors
                        (postwalk #(if (map? %) (vals %) %))
                        flatten
-                       first)}
+                       vec)}}
         m)
       m)
     m))

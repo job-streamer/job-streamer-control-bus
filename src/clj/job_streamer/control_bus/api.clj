@@ -444,7 +444,7 @@
                                      :calendar/name v/required)
                            (and (#{:delete} (get-in ctx [:request :request-method]))
                                 (when (calendar-is-already-used-by-job? name)
-                                  {:message {:already-used "This calendar is already used by some job."}}))))
+                                  {:message {:messages ["This calendar is already used by some job."]}}))))
   :put! (fn [{cal :edn}]
           (model/transact [{:db/id (:db/id cal)
                             :calendar/name (:calendar/name cal)
