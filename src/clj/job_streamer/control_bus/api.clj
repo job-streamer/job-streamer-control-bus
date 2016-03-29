@@ -93,15 +93,13 @@
        (flatten)
        (apply hash-set)))
 
-(defn calendar-is-not-already-used-by-job?[calendar-name]
-  (nil? (model/query
-          '{:find [(count ?job) .]
-            :in [$ ?calendar-name]
-            :where [[?job :job/schedule ?schedule]
-                    [?schedule :schedule/calendar ?calendar]
-                    [?calendar :calendar/name ?calendar-name]]} calendar-name)))
-(defn forced-true?[calendar-name]
-  false)
+(defn calendar-is-already-used-by-job?[calendar-name]
+  (model/query
+    '{:find [(count ?job) .]
+      :in [$ ?calendar-name]
+      :where [[?job :job/schedule ?schedule]
+              [?schedule :schedule/calendar ?calendar]
+              [?calendar :calendar/name ?calendar-name]]} calendar-name))
 
 (defresource stats-resource [app-name]
   :available-media-types ["application/edn"]
@@ -445,14 +443,8 @@
   :malformed? (fn [ctx](or (validate (parse-body ctx)
                                      :calendar/name v/required)
                            (and (#{:delete} (get-in ctx [:request :request-method]))
-                                (if-let [errors (first
-                                                  (b/validate {:name name}
-                                                              :name [[calendar-is-not-already-used-by-job? :message "This calendar is already used by some job."]]))]
-                                  (do
-                                    {:message (->> errors
-                                                   (postwalk #(if (map? %) (vals %) %))
-                                                   flatten
-                                                   first)})))))
+                                (when (calendar-is-already-used-by-job? name)
+                                  {:message {:already-used "This calendar is already used by some job."}}))))
   :put! (fn [{cal :edn}]
           (model/transact [{:db/id (:db/id cal)
                             :calendar/name (:calendar/name cal)
@@ -465,7 +457,10 @@
                (-> (model/query '{:find [(pull ?e [:*]) .]
                                   :in [$ ?n]
                                   :where [[?e :calendar/name ?n]]} name)
-                   (update-in [:calendar/weekly-holiday] edn/read-string))))
+                   (update-in [:calendar/weekly-holiday] edn/read-string)))
+  :handle-malformed (fn[ctx]
+                      (ring-response {:status 400
+                                      :body (pr-str (:message ctx))})))
 
 
 (defresource applications-resource
