@@ -10,11 +10,11 @@ import javax.inject.Named;
 import java.io.File;
 import java.io.IOException;
 import java.io.Serializable;
+import java.lang.annotation.Annotation;
 import java.net.*;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
-import java.util.logging.Logger;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
@@ -22,7 +22,7 @@ import java.util.zip.ZipFile;
  * @author kawasima
  */
 public class BatchComponentScanner {
-    private BatchComponentContaienr container = new BatchComponentContaienr();
+    private BatchComponentContainer container = new BatchComponentContainer();
 
     Set<String>  jarEntryNames(File zipFile) throws IOException {
         Set<String> entryNames = new HashSet<>();
@@ -37,13 +37,13 @@ public class BatchComponentScanner {
     String decideRefName(Class<?> clazz) {
         System.err.println(clazz);
         System.err.println(clazz.getAnnotations());
-        Named named = clazz.getDeclaredAnnotation(Named.class);
-        if (named != null && !Strings.isNullOrEmpty(named.value())) {
-            return named.value();
-        } else {
-            return clazz.getName();
+        Annotation[] annotations = clazz.getDeclaredAnnotations();
+        for (Annotation annotation : annotations) {
+            if (annotation instanceof Named && !Strings.isNullOrEmpty(((Named) annotation).value())) {
+                return ((Named) annotation).value();
+            }
         }
-
+        return clazz.getName();
     }
 
     void pickOverBatchComponent(String resourcePath, ClassLoader cl) {
@@ -134,7 +134,7 @@ public class BatchComponentScanner {
                 // ignore
             }
         }
-        URLClassLoader cl = new URLClassLoader(urls.toArray(new URL[args.length]), BatchComponentContaienr.class.getClassLoader());
+        URLClassLoader cl = new URLClassLoader(urls.toArray(new URL[args.length]), BatchComponentContainer.class.getClassLoader());
         BatchComponentScanner scanner = new BatchComponentScanner();
         scanner.findBatchComponents(cl);
         for (String batchlet : scanner.container.batchlets) {
@@ -152,10 +152,9 @@ public class BatchComponentScanner {
         for (String throwable : scanner.container.throwables) {
             System.out.println("throwable:" + throwable);
         }
-
     }
 
-    static class BatchComponentContaienr implements Serializable {
+    static class BatchComponentContainer implements Serializable {
         public Set<String> batchlets = new HashSet<>();
         public Set<String> itemReaders = new HashSet<>();
         public Set<String> itemWriters = new HashSet<>();

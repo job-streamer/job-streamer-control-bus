@@ -167,7 +167,10 @@
 
     (go-loop []
       (<! (timeout 10000))
-      (recovery/update-job-status)
+      (try
+        (recovery/update-job-status)
+        (catch Throwable t
+          (log/error t)))
       (recur))
 
     (server/run-server

@@ -1,5 +1,6 @@
 (ns job-streamer.control-bus.rrd
   (:import [java.nio.file Files Paths LinkOption]
+           [java.nio.file.attribute FileAttribute]
            [java.awt Color]
            [org.rrd4j ConsolFun DsType]
            [org.rrd4j.core RrdDef RrdDbPool Util]
@@ -26,9 +27,15 @@
        (.toString rrd-path)
        (create-rrd-def rrd-path))))
 
-(defn update [agt]
+(defn create-rrd-path [agt]
   (let [rrd-file (str (:agent/instance-id agt) ".rrd")
-        db (rrd-db (Paths/get "target" (into-array String [rrd-file])))]
+        path (Paths/get "rrd" (into-array String [rrd-file]))]
+    (when-not (Files/exists (.getParent path) (into-array LinkOption []))
+      (Files/createDirectory (.getParent path) (into-array FileAttribute [])))
+    path))
+
+(defn update [agt]
+  (let [db (rrd-db (create-rrd-path agt))]
     (try
       (doto (.createSample db (Util/getTimestamp))
         (.setValue "load-process"    (double (get-in agt [:agent/stats :cpu :process :load] 0)))
@@ -41,8 +48,7 @@
 (defn render-graph [agt type]
   (let [g-def (RrdGraphDef.)
         now (Util/getTimestamp)
-        rrd-path (Paths/get "target"
-                            (into-array String [(str (:agent/instance-id agt) ".rrd")]))]
+        rrd-path (create-rrd-path agt)]
     (doto g-def
       (.setStartTime (- now (* 24 60 60)))
       (.setEndTime   now)
