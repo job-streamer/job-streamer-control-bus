@@ -412,6 +412,9 @@
   :allowed-methods [:get :post]
   :malformed? #(validate (parse-body %)
                          :calendar/name v/required)
+  :exists? (model/query '{:find [(pull ?e [:*]) .]
+                                  :in [$ ?n]
+                                  :where [[?e :calendar/name ?n]]} name)
   :post! (fn [{cal :edn}]
            (let [id (or (:db/id cal) (d/tempid :db.part/user))]
              (if-let [old-id (model/query
