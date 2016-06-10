@@ -412,16 +412,21 @@
   :allowed-methods [:get :post]
   :malformed? #(validate (parse-body %)
                          :calendar/name v/required)
-  :exists? (model/query '{:find [(pull ?e [:*]) .]
-                                  :in [$ ?n]
-                                  :where [[?e :calendar/name ?n]]} name)
+  :exists? (fn [{{cal-name :calendar/name} :edn :as ctx}]
+             (if (#{:post} (get-in ctx [:request :request-method]))
+               (when-let [cal (model/query '{:find [?e .]
+                                             :in [$ ?n]
+                                             :where [[?e :calendar/name ?n]]} cal-name)]
+                 {:cal-id cal})
+               true))
+
   :post! (fn [{cal :edn}]
            (let [id (or (:db/id cal) (d/tempid :db.part/user))]
              (if-let [old-id (model/query
-                               '{:find [?calendar .]
-                                 :in [$ ?calendar-name]
-                                 :where [[?calendar :calendar/name ?calendar-name]]}
-                               (:calendar/name cal))]
+                              '{:find [?calendar .]
+                                :in [$ ?calendar-name]
+                                :where [[?calendar :calendar/name ?calendar-name]]}
+                              (:calendar/name cal))]
                (model/transact [{:db/id old-id
                                  :calendar/name (:calendar/name cal)
                                  :calendar/holidays (:calendar/holidays cal)
@@ -448,6 +453,10 @@
                            (and (#{:delete} (get-in ctx [:request :request-method]))
                                 (when (calendar-is-already-used-by-job? name)
                                   {:message {:messages ["This calendar is already used by some job."]}}))))
+
+  :exists? (model/query '{:find [(pull ?e [:*]) .]
+                         :in [$ ?n]
+                         :where [[?e :calendar/name ?n]]} name)
   :put! (fn [{cal :edn}]
           (model/transact [{:db/id (:db/id cal)
                             :calendar/name (:calendar/name cal)
@@ -457,10 +466,10 @@
              (scheduler/delete-calendar name)
              (model/transact [[:db.fn/retractEntity [:calendar/name name]]]))
   :handle-ok (fn [ctx]
-               (-> (model/query '{:find [(pull ?e [:*]) .]
-                                  :in [$ ?n]
-                                  :where [[?e :calendar/name ?n]]} name)
-                   (update-in [:calendar/weekly-holiday] edn/read-string)))
+               (some-> (model/query '{:find [(pull ?e [:*]) .]
+                                      :in [$ ?n]
+                                      :where [[?e :calendar/name ?n]]} name)
+                       (update-in [:calendar/weekly-holiday] edn/read-string)))
   :handle-malformed (fn[ctx]
                       (ring-response {:status 400
                                       :body (pr-str (:message ctx))})))
