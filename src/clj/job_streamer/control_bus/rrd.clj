@@ -1,4 +1,5 @@
 (ns job-streamer.control-bus.rrd
+  (:refer-clojure :exclude [update])
   (:import [java.nio.file Files Paths LinkOption]
            [java.nio.file.attribute FileAttribute]
            [java.awt Color]

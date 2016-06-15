@@ -1,5 +1,7 @@
-(ns job-streamer.control-bus.server
-  (:require [ring.util.servlet :as servlet]
+(ns job-streamer.control-bus.component.undertow
+  (:require [com.stuartsierra.component :as component]
+            [ring.util.servlet :as servlet]
+            [compojure.core :refer [context]]
             [clojure.tools.logging :as log])
   (:import [net.unit8.wscl ClassProvider]
            [net.unit8.logback.server WebSocketReceiver]
@@ -84,7 +86,8 @@
       (.addPrefixPath handler
                       (:path ws)
                       (Handlers/websocket
-                       (websocket-callback (dissoc ws :path))))) 
+                       (websocket-callback (dissoc ws :path))))
+      (log/info "Deploy socketapp to " (:path ws)))
     (let [server (.. (Undertow/builder)
                      (addHttpListener port "0.0.0.0")
                      (setHandler (.addPrefixPath handler "/" (.start servlet-manager)))
@@ -93,3 +96,22 @@
                      (build))]
       (.start server)
       server)))
+
+(defrecord UndertowServer [app socketapp port prefix]
+  component/Lifecycle
+
+  (start [component]
+    (let [server (run-server (context prefix [] (:handler app))
+                             :prefix prefix
+                             :port port
+                             :websockets [socketapp])]
+      (assoc component :server server)))
+
+  (stop [component]
+    (if-let [server (:server component)]
+      (.stop (:server component)))
+    (dissoc component :server)))
+
+(defn undertow-server [options]
+  (map->UndertowServer (merge {:port 45102} options)))
+

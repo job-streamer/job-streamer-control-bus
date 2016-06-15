@@ -1,6 +1,7 @@
-(ns job-streamer.control-bus.broadcast
+(ns job-streamer.control-bus.component.discoverer
   (:require [clojure.tools.logging :as log]
             [clojure.java.io :as io]
+            [com.stuartsierra.component :as component]
             [environ.core :refer [env]]
             [org.httpkit.client :as http])
   (:import [java.nio.channels DatagramChannel Selector SelectionKey]
@@ -81,20 +82,33 @@
                   (fn [{:keys [status headers error]}]
                     (log/debug "join-request" status))))))
 
-(defn start [ws-port]
-  (future
+(defrecord Discoverer [ws-port]
+  component/Lifecycle
+
+  (start [component]
     (let [port (Integer/parseInt (or (:discovery-port env) "45100"))
           channel (if-let [address (:discovery-address env)]
-                    (create-multicast-channel (InetAddress/getByName address) port)
-                    (create-channel port))
-          selector (Selector/open)]
-      (.register channel selector SelectionKey/OP_READ)
-      (loop [key-num (.select selector)]
-        (when (> key-num 0)
-          (let [key-set (.selectedKeys selector)]
-            (doseq [key key-set]
-              (.remove key-set key)
-              (when (.isReadable key)
-                (do-receive key ws-port)))
-            (recur (.select selector))))))))
+                            (create-multicast-channel (InetAddress/getByName address) port)
+                            (create-channel port))
+          f (future
+              (let [selector (Selector/open)]
+                (.register channel selector SelectionKey/OP_READ)
+                (loop [key-num (.select selector)]
+                  (when (> key-num 0)
+                    (let [key-set (.selectedKeys selector)]
+                      (doseq [key key-set]
+                        (.remove key-set key)
+                        (when (.isReadable key)
+                          (do-receive key ws-port)))
+                      (recur (.select selector)))))))]
+      (assoc component
+             :port port
+             :future f)))
 
+  (stop [component]
+    (if-let [f (:future component)]
+      (future-cancel f))
+    (dissoc component :port :future)))
+
+(defn discoverer-component [options]
+  (map->Discoverer options))

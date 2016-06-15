@@ -1,31 +1,7 @@
 (ns job-streamer.control-bus.model
-  (:use [datomic-schema.schema :only [fields part schema]]
-        [environ.core :only [env]])
-  (:require [datomic.api :as d]
-            [datomic-schema.schema :as s]))
+  (:require [datomic-schema.schema :refer [fields part schema]]))
 
-(def uri (or (env :datomic-url "datomic:free://localhost:4334/job-streamer")))
-(defonce conn (atom nil))
-
-(defn query [q & params]
-  (let [db (d/db @conn)]
-    (apply d/q q db params)))
-
-(defn pull [pattern eid]
-  (let [db (d/db @conn)]
-    (d/pull db pattern eid)))
-
-(defn transact [transaction]
-  @(d/transact @conn transaction))
-
-(defn resolve-tempid [tempids tempid]
-  (let [db (d/db @conn)]
-    (d/resolve-tempid db tempids tempid)))
-
-(defn dbparts []
-  [(part "job")])
-
-(defn dbschema []
+(def dbschema
   [(schema application
            (fields
             [name :string :indexed :unique-value :fulltext]
@@ -121,22 +97,4 @@
             [name :string :unique-value :indexed]
             [weekly-holiday :string]
             [holidays :instant :many]))])
-
-(defn generate-enums [& enums]
-  (apply concat
-         (map #(s/get-enums (name (first %)) :db.part/user (second %)) enums)))
-
-(defn create-schema []
-  ;(d/delete-database uri)
-  (d/create-database uri)
-  (reset! conn (d/connect uri))
-  (let [schema (concat
-                (s/generate-parts (dbparts))
-                (generate-enums [:batch-status [:undispatched :queued :abandoned :completed :failed :started :starting :stopped :stopping :unknown]]
-                                [:log-level [:trace :debug :info :warn :error]]
-                                [:action [:abandon :stop :alert]])
-                (s/generate-schema (dbschema)))]
-    (d/transact
-     @conn
-     schema)))
 

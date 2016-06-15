@@ -2,7 +2,6 @@
   (:require [clojure.test :refer :all]
             [job-streamer.control-bus.job :as job]))
 
-
 (def jobxml1 "
 <?xml version='1.0' encoding='utf-8'?>
 <job id='job1'>
@@ -33,5 +32,4 @@
 (deftest simple-chunk
   (let [job (job/xml->edn jobxml1)]
     (is "Processor1" (get-in job [:job/components :step/chunk :chunk/processor :proccessor/ref]))))
-
 

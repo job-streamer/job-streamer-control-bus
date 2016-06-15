@@ -1,7 +1,7 @@
 (ns job-streamer.control-bus.validation
   (:require [bouncer.core :as b]
-            [bouncer.validators :as v])
-  (:use [clojure.walk :only [postwalk]]))
+            [bouncer.validators :as v]
+            [clojure.walk :refer [postwalk]]))
 
 (defn validate [m & forms]
   (if (sequential? m)
