@@ -69,4 +69,4 @@
           :calendar  [:datomic :scheduler]
           :scheduler [:datomic]
           :migration [:datomic]
-          :dispatcher [:datomic :apps :jobs]}))))
+          :dispatcher [:datomic :apps :jobs :agents]}))))

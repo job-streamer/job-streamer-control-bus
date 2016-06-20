@@ -506,7 +506,7 @@
                                            :job-execution/job-parameters (pr-str (or parameters {}))}
                                           [:db/add job-id :job/executions execution-id]])
                                         :tempids)
-                            new-id (d/resolve-tempid tempids execution-id)]
+                            new-id (d/resolve-tempid datomic tempids execution-id)]
                         (when-let [time-monitor (d/pull datomic
                                                         '[{:job/time-monitor
                                                            [:time-monitor/duration

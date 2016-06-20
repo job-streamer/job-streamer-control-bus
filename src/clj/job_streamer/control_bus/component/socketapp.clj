@@ -7,8 +7,6 @@
                                                 [agents :as ag]
                                                 [jobs :as job])))
 
-
-
 (defmulti handle-command (fn [socketapp msg ch] (:command msg)))
 
 (defmethod handle-command :ready [{:keys [agents]} command ch]
@@ -17,7 +15,7 @@
 
 (defmethod handle-command :progress [{:keys [agents jobs]} {:keys [id execution-id]} ch]
   (log/debug "Progress execution" execution-id)
-  (ag/update-execution agents
+  (ag/update-execution
    (ag/find-agent-by-channel agents ch)
    execution-id
    :on-success (fn [response]
@@ -45,7 +43,7 @@
 (defmethod handle-command :progress-step [{:keys [agents jobs datomic]}
                                           {:keys [id execution-id step-execution-id
                                                   instance-id]} ch]
-  (ag/update-step-execution agents
+  (ag/update-step-execution
    (ag/find-agent-by-channel agents ch)
    execution-id
    step-execution-id
@@ -74,7 +72,8 @@
     (assoc component
            :path "/join"
            :on-message (fn [ch message]
-                         (handle-command component (edn/read-string message) ch))
+                         (when (not-empty message)
+                           (handle-command component (edn/read-string message) ch)))
            :on-close (fn [ch close-reason]
                        (log/info "disconnect" ch "for" close-reason)
                        (handle-command component {:command :bye} ch))))

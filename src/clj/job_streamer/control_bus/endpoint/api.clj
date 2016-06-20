@@ -3,7 +3,6 @@
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.tools.logging :as log]
-            [liberator.core :refer [defresource]]
             [compojure.core :refer [ANY GET routes]]
             [bouncer.validators :as v]
             (job-streamer.control-bus.component

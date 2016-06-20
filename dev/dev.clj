@@ -29,7 +29,7 @@
 (when (io/resource "local.clj")
   (load "local"))
 
-(gen/set-ns-prefix 'duct-test)
+(gen/set-ns-prefix 'job-streamer.control-bus)
 
 (reloaded.repl/set-init! new-system)
 

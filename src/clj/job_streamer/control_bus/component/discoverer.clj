@@ -1,6 +1,7 @@
 (ns job-streamer.control-bus.component.discoverer
   (:require [clojure.tools.logging :as log]
             [clojure.java.io :as io]
+            [clojure.core.async :refer [go-loop close!]]
             [com.stuartsierra.component :as component]
             [environ.core :refer [env]]
             [org.httpkit.client :as http])
@@ -90,25 +91,33 @@
           channel (if-let [address (:discovery-address env)]
                             (create-multicast-channel (InetAddress/getByName address) port)
                             (create-channel port))
-          f (future
-              (let [selector (Selector/open)]
-                (.register channel selector SelectionKey/OP_READ)
-                (loop [key-num (.select selector)]
-                  (when (> key-num 0)
-                    (let [key-set (.selectedKeys selector)]
-                      (doseq [key key-set]
-                        (.remove key-set key)
-                        (when (.isReadable key)
-                          (do-receive key ws-port)))
-                      (recur (.select selector)))))))]
+          selector (Selector/open)]
+      (.register channel selector SelectionKey/OP_READ)
+      
       (assoc component
              :port port
-             :future f)))
+             :channel  channel
+             :selector selector
+             :main-loop (go-loop [key-num (.select selector)]
+                          (when (> key-num 0)
+                            (let [key-set (.selectedKeys selector)]
+                              (doseq [key key-set]
+                                (.remove key-set key)
+                                (when (.isReadable key)
+                                  (do-receive key ws-port)))
+                              (recur (.select selector))))))))
 
   (stop [component]
-    (if-let [f (:future component)]
-      (future-cancel f))
-    (dissoc component :port :future)))
+    (if-let [selector (:selector component)]
+      (.close selector))
+    
+    (if-let [channel (:channel component)]
+      (.close channel))
+
+    (if-let [main-loop (:main-loop component)]
+      (close! main-loop))
+
+    (dissoc component :port :selector :channel :main-loop)))
 
 (defn discoverer-component [options]
   (map->Discoverer options))

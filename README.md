@@ -4,7 +4,7 @@ The JobStreamer control bus is a message passing system to agents.
 
 ![](./doc/scheduling.png)
 
-# Features
+## Features
 
 * Deploy a batch application. (And parse JavaBatch components from application classpath)
 * Register a job.
@@ -14,6 +14,28 @@ The JobStreamer control bus is a message passing system to agents.
 * Schedule a job.
 * Stop a schedule of job.
 * Delete a schedule of job.
+
+## For Developers
+
+[Duct framework](https://github.com/duct-framework/duct) is used in the JobStreamer control bus.
+
+Run a REPL and start a control bus as follows:
+
+```
+% lein repl
+Clojure 1.8.0
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_92-b14
+    Docs: (doc function-name-here)
+          (find-doc "part-of-name-here")
+  Source: (source function-name-here)
+ Javadoc: (javadoc java-object-or-class-here)
+    Exit: Control+D or (exit) or (quit)
+ Results: Stored in vars *1, *2, *3, an exception in *e
+
+user=> (dev)
+:loaded
+user=> (go)
+```
 
 ## API
 

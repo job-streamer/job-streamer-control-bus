@@ -5,6 +5,8 @@
 (def defaults
   {:http {:port 45102}
    :discoverer {:ws-port 45102}
+   :scheduler  {:host "localhost"
+                :port 45102}
    :migration {:dbschema model/dbschema}})
 
 (def environ

@@ -7,9 +7,8 @@
                                                 [datomic :as d]
                                                 [jobs :as jobs])))
 
-(defn- dispatch [{:keys [dispatcher-ch datomic agents]} agt execution-request]
+(defn- dispatch [{:keys [dispatcher-ch datomic]} agt execution-request]
   (ag/execute-job
-   agents
    agt execution-request
    
    :on-error
@@ -51,6 +50,7 @@
   (go-loop []
     (let [undispatched (jobs/find-undispatched jobs)]
       (doseq [[execution-request job parameter] undispatched]
+        (log/info "submitter/dispatcher=" dispatcher)
         (submit dispatcher
                 {:request-id execution-request
                  :class-loader-id (:application/class-loader-id
@@ -60,14 +60,14 @@
       (<! (timeout 2000))
       (recur))))
 
-(defrecord Dispatcher [datomic]
+(defrecord Dispatcher [datomic agents]
   component/Lifecycle
   (start [component]
     (let [dispatcher-ch (chan)
           main-loop (go-loop []
                       (let [execution-request (<! dispatcher-ch)]
                         (log/info "Dispatch request for " execution-request)
-                        (loop [agt (ag/find-agent), log-interval 0]
+                        (loop [agt (ag/find-agent agents), log-interval 0]
                           (if agt
                             (dispatch (assoc component :dispatcher-ch dispatcher-ch)
                                       agt execution-request)
@@ -75,7 +75,7 @@
                               (if (= (mod log-interval 10) 0)
                                 (log/info "No available agents for " execution-request))
                               (<! (timeout 3000))
-                              (recur (ag/find-agent) (inc log-interval)))))
+                              (recur (ag/find-agent agents) (inc log-interval)))))
                         (recur)))
           submit-loop (submitter (assoc component
                                         :dispatcher-ch dispatcher-ch))]
