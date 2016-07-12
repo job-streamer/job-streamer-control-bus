@@ -3,7 +3,7 @@
                  [com.stuartsierra/component "0.3.1"]
                  [duct "0.7.0"]
                  [meta-merge "1.0.0"]
-                 
+
                  [org.clojure/tools.logging "0.3.1"]
                  [org.clojure/core.async "0.2.374"]
                  [javax/javaee-api "7.0"]
@@ -36,7 +36,7 @@
   :java-source-paths ["src/java"]
   :javac-options ["-target" "1.7" "-source" "1.7" "-Xlint:-options"]
   :prep-tasks [["javac"] ["compile"]]
-  
+
   :plugins [[lein-ring "0.9.7"]
             [lein-libdir "0.1.1"]]
   :libdir-path "lib"
@@ -56,6 +56,7 @@
                                   [reloaded.repl "0.2.2"]
                                   [org.clojure/tools.namespace "0.2.11"]
                                   [org.clojure/tools.nrepl "0.2.12"]
+                                  [com.gearswithingears/shrubbery "0.3.1"]
                                   [eftest "0.1.1"]
                                   [kerodon "0.8.0"]]
                    :source-paths ["dev"]

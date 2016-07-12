@@ -7,8 +7,7 @@
             [liberator.core :as liberator]
             [liberator.representation :refer [ring-response]]
             (job-streamer.control-bus [model :as model]
-                                      [rrd :as rrd]
-                                      [apps :as apps])
+                                      [rrd :as rrd])
             (job-streamer.control-bus.component [datomic :as d]))
   (:import [java.util UUID]
            [java.io ByteArrayInputStream]))
@@ -66,6 +65,16 @@
                             vec))
                       (dissoc :agent/channel))))))
 
+(defn execute-job [agt execution-request & {:keys [on-error on-success]}]
+    (log/info (pr-str execution-request))
+    (http/post (str "http://" (:agent/host agt) ":" (:agent/port agt) "/jobs")
+               {:body (pr-str execution-request)
+                :headers {"Content-Type" "application/edn"}}
+               (fn [{:keys [status headers body error]}]
+                 (cond (or (>= status 400) error)
+                       (when on-error (on-error status error))
+                       on-success (on-success (edn/read-string body))))))
+
 (defn ready [{:keys [datomic agents]} ch data]
   (log/info "ready" ch data)
   (when-not (d/query datomic
@@ -88,18 +97,6 @@
                                    (map :agent/instance-id))]
     (doseq [instance-id instance-ids]
       (swap! agents dissoc instance-id))))
-
-(defn execute-job
-  "Send a request for job execution to an agent."
-  [agt execution-request & {:keys [on-error on-success]}]
-  (log/info (pr-str execution-request))
-  (http/post (str "http://" (:agent/host agt) ":" (:agent/port agt) "/jobs")
-             {:body (pr-str execution-request)
-              :headers {"Content-Type" "application/edn"}}
-             (fn [{:keys [status headers body error]}]
-               (cond (or (>= status 400) error)
-                     (when on-error (on-error status error)) 
-                     on-success (on-success (edn/read-string body))))))
 
 (defn stop-execution [{:keys [agents]} execution & {:keys [on-error on-success]}]
   (let [instance-id (get-in execution [:job-execution/agent :agent/instance-id])]
@@ -129,14 +126,15 @@
                     :job-execution/batch-status
                     :batch-status/abandoned}]))))
 
-(defn restart-execution [{:keys [agents]} execution & {:keys [on-error on-success]}]
+(defn restart-execution [{:keys [agents]} execution class-load-id
+                         & {:keys [on-error on-success]}]
   (let [instance-id (get-in execution [:job-execution/agent :agent/instance-id])]
     (when-let [agt (get @agents instance-id)]
       (http/put (str "http://" (:agent/host agt) ":" (:agent/port agt)
                       "/job-execution/" (:job-execution/execution-id execution) "/restart")
                  {:as :text
                   :body (pr-str {:parameters {}
-                                 :class-loader-id (:application/class-loader-id (apps/find-by-name "default"))})
+                                 :class-loader-id class-load-id})
                   :headers {"Content-Type" "application/edn"}}
                  (fn [{:keys [status headers body error]}]
                    (cond (or (>= status 400) error) (when on-error (on-error error))
@@ -172,20 +170,10 @@
               (cond (or (>= status 400) error) (when on-error (on-error error))
                     on-success (on-success (edn/read-string body))))))
 
-(defn available-agents [{:keys [agents]}]
-  (vals @agents))
-
-(defn find-agent-by-channel [{:keys [agents]} ch]
-  (first (filter #(= (:agent/channel %) ch) (vals @agents))))
-
-(defn find-agent [component]
-  (->> (vals @(:agents component))
-       (filter #(= (:agent/status %) :ready))
-       (sort #(or (< (get-in %1 [:agent/jobs :running]) (get-in %2 [:agent/jobs :running]))
-                  (and (= (get-in %1 [:agent/jobs :running]) (get-in %2 [:agent/jobs :running]))
-                       (< (get-in %1 [:agent/stats :cpu :system :load-average])
-                          (get-in %2 [:agent/stats :cpu :system :load-average])))))
-       first))
+(defprotocol IAgentsManagement
+  (available-agents [this])
+  (find-agent [this])
+  (find-agent-by-channel [this ch]))
 
 (defrecord Agents []
   component/Lifecycle
@@ -211,7 +199,23 @@
   (stop [component]
     (if-let [main-loop (:main-loop component)]
       (close! main-loop))
-    (dissoc component :main-loop :agents)))
+    (dissoc component :main-loop :agents))
+
+  IAgentsManagement
+  (available-agents [{:keys [agents]}]
+    (vals @agents))
+
+  (find-agent [component]
+    (->> (vals @(:agents component))
+         (filter #(= (:agent/status %) :ready))
+         (sort #(or (< (get-in %1 [:agent/jobs :running]) (get-in %2 [:agent/jobs :running]))
+                    (and (= (get-in %1 [:agent/jobs :running]) (get-in %2 [:agent/jobs :running]))
+                         (< (get-in %1 [:agent/stats :cpu :system :load-average])
+                            (get-in %2 [:agent/stats :cpu :system :load-average])))))
+         first))
+
+  (find-agent-by-channel [{:keys [agents]} ch]
+    (first (filter #(= (:agent/channel %) ch) (vals @agents)))))
 
 (defn agents-component [options]
   (map->Agents options))

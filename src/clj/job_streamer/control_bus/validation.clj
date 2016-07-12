@@ -11,7 +11,8 @@
         {:message {:messages (->> errors
                        (postwalk #(if (map? %) (vals %) %))
                        flatten
-                       vec)}}
+                       vec)}
+         :representation {:media-type "application/edn"}}
         m)
       m)
     m))

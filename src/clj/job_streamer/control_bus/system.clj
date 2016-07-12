@@ -15,6 +15,7 @@
              [scheduler  :refer [scheduler-component]]
              [dispatcher :refer [dispatcher-component]]
              [discoverer :refer [discoverer-component]]
+             [recoverer :refer [recoverer-component]]
              [datomic    :refer [datomic-component]]
              [migration  :refer [migration-component]]
              [socketapp  :refer [socketapp-component]])
@@ -51,6 +52,7 @@
          :http       (undertow-server      (:http config))
          :dispatcher (dispatcher-component (:dispatcher config))
          :discoverer (discoverer-component (:discoverer config))
+         :recoverer  (recoverer-component  (:recoverer  config))
          :scheduler  (scheduler-component  (:scheduler  config))
          :datomic    (datomic-component    (:datomic    config))
          :migration  (migration-component  (:migration  config))
@@ -69,4 +71,5 @@
           :calendar  [:datomic :scheduler]
           :scheduler [:datomic]
           :migration [:datomic]
+          :recoverer [:datomic :jobs :agents]
           :dispatcher [:datomic :apps :jobs :agents]}))))
