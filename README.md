@@ -2,6 +2,8 @@
 
 The JobStreamer control bus is a message passing system to agents.
 
+[![circleci](https://circleci.com/gh/job-streamer/job-streamer-control-bus.svg?style=shield&circle-token= b0a9893f816a09960e2dc235866c3748fe8283d7)](https://circleci.com/gh/job-streamer/job-streamer-control-bus)
+
 ![](./doc/scheduling.png)
 
 ## Features
