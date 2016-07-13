@@ -1,13 +1,5 @@
 package org.jobstreamer.batch;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import javax.batch.api.AbstractBatchlet;
-import javax.batch.operations.BatchRuntimeException;
-import javax.batch.runtime.context.StepContext;
-import javax.enterprise.inject.Any;
-import javax.inject.Inject;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
@@ -18,6 +10,15 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+
+import javax.batch.api.AbstractBatchlet;
+import javax.batch.operations.BatchRuntimeException;
+import javax.batch.runtime.context.StepContext;
+import javax.enterprise.inject.Any;
+import javax.inject.Inject;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * A builtin batchlet for running a shellscript.
@@ -47,7 +48,8 @@ public class ShellBatchlet extends AbstractBatchlet {
     }
 
     private String executeScript(Path script) {
-        ProcessBuilder pb = new ProcessBuilder(script.toAbsolutePath().toString());
+        String args = stepContext.getProperties().getProperty("args");
+        ProcessBuilder pb = new ProcessBuilder(script.toAbsolutePath().toString(),args);
         pb.redirectErrorStream(true);
 
         try {
