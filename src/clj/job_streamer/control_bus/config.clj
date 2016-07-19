@@ -10,6 +10,9 @@
    :migration {:dbschema model/dbschema}})
 
 (def environ
-  {:http {:port (some-> env :control_bus-port Integer.)}
-   :discoverer {:ws-port (some-> env :control_bus-port Integer.)}})
+  (let [port (some-> env :control-bus-port Integer.)]
+  {:http {:port port}
+   :discoverer {:ws-port port}
+   :scheduler  {:host "localhost"
+                :port port}}))
 
