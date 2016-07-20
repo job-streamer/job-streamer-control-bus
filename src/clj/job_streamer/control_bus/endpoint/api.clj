@@ -10,8 +10,7 @@
              [jobs :as jobs]
              [agents :refer [find-agent available-agents] :as ag]
              [scheduler :as scheduler]
-             [calendar :as calendar]
-             [dispatcher :as dispatcher])
+             [calendar :as calendar])
             (job-streamer.control-bus
              [model :as model]
              [notification :as notification]

@@ -18,7 +18,7 @@
   (start [component]
     (let [schema (concat
                   ;(s/generate-parts (dbparts))
-                  (generate-enums [:batch-status [:undispatched :queued
+                  (generate-enums [:batch-status [:undispatched :unrestarted :queued
                                                   :abandoned :completed :failed
                                                   :started :starting :stopped :stopping
                                                   :unknown]]
@@ -33,4 +33,3 @@
 
 (defn migration-component [options]
   (map->Migration options))
-

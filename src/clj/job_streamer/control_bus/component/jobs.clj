@@ -50,10 +50,11 @@
   (d/query
    datomic
    '{:find [?job-execution ?job-obj ?param-map]
-     :where [[?job-execution :job-execution/batch-status :batch-status/undispatched]
+     :where [[?job :job/executions ?job-execution]
              [?job-execution :job-execution/job-parameters ?parameter]
-             [?job :job/executions ?job-execution]
              [?job :job/edn-notation ?edn-notation]
+             (or [?job-execution :job-execution/batch-status :batch-status/undispatched]
+                 [?job-execution :job-execution/batch-status :batch-status/unrestarted])
              [(clojure.edn/read-string ?edn-notation) ?job-obj]
              [(clojure.edn/read-string ?parameter) ?param-map]]}))
 
@@ -469,7 +470,7 @@
                                               [:db/id :agent/instance-id]}]
                                            id)]
                 (when-let [[app-id job-id] (d/query datomic
-                                                    '{:find [?app ?job .]
+                                                    '{:find [[?app ?job]]
                                                       :in [$ ?eid]
                                                       :where [[?job :job/executions ?eid]
                                                               [?app :application/jobs ?job]]}
@@ -508,39 +509,13 @@
                    tempids (-> (d/transact
                                 datomic
                                 [{:db/id execution-id
-                                  :job-execution/batch-status :batch-status/unknown
+                                  :job-execution/batch-status :batch-status/unrestarted
                                   :job-execution/create-time (java.util.Date.)
                                   :job-execution/agent (:job-execution/agent execution)
                                   :job-execution/job-parameters (pr-str (or parameters {}))}
                                  [:db/add job-id :job/executions execution-id]])
-                               :tempids)
-                   class-load-id (some-> (d/pull datomic
-                                                 '[:*]
-                                                 app-id)
-                                         :application/class-loader-id)
-                   new-id (d/resolve-tempid datomic tempids execution-id)]
-               (when-let [time-monitor (d/pull datomic
-                                               '[{:job/time-monitor
-                                                  [:time-monitor/duration
-                                                   {:time-monitor/action [:db/ident]}]}]
-                                               job-id)]
-                 (scheduler/time-keeper
-                  scheduler new-id
-                  (get-in time-monitor [:job/time-monitor :time-monitor/duration])
-                  (get-in time-monitor [:job/time-monitor :time-monitor/action :db/ident])))
-               (ag/restart-execution
-                agents execution class-load-id
-                :on-success (fn [resp]
-                              (d/transact datomic
-                                          [{:db/id new-id
-                                            :job-execution/execution-id (:execution-id resp)
-                                            :job-execution/batch-status (:batch-status resp)
-                                            :job-execution/start-time   (:start-time   resp)}])
-                              (ag/update-execution-by-id
-                               agents
-                               new-id
-                               :on-success (fn [new-exec]
-                                             (save-execution jobs new-id new-exec))))))
+                               :tempids)]
+               {:execution-id (d/resolve-tempid datomic tempids execution-id)})
 
              :alert
              (let [job (d/query datomic

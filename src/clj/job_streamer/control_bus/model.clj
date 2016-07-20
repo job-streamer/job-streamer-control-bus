@@ -97,4 +97,3 @@
             [name :string :unique-value :indexed]
             [weekly-holiday :string]
             [holidays :instant :many]))])
-

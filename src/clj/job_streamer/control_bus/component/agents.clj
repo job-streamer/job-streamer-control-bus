@@ -129,7 +129,7 @@
 (defn restart-execution [{:keys [agents]} execution class-load-id
                          & {:keys [on-error on-success]}]
   (let [instance-id (get-in execution [:job-execution/agent :agent/instance-id])]
-    (when-let [agt (get @agents instance-id)]
+    (if-let [agt (get @agents instance-id)]
       (http/put (str "http://" (:agent/host agt) ":" (:agent/port agt)
                       "/job-execution/" (:job-execution/execution-id execution) "/restart")
                  {:as :text
@@ -138,7 +138,8 @@
                   :headers {"Content-Type" "application/edn"}}
                  (fn [{:keys [status headers body error]}]
                    (cond (or (>= status 400) error) (when on-error (on-error error))
-                         on-success (on-success (edn/read-string body))))))))
+                         on-success (on-success (edn/read-string body)))))
+      (log/warn "Not found agent. Can't restart"))))
 
 (defn update-execution [agt execution-id & {:keys [on-error on-success]}]
   (log/debug "update-execution" execution-id agt)
@@ -194,7 +195,9 @@
                                         (rrd/update agt))))))
                       (<! (timeout 60000))
                       (recur))]
-      (assoc component :agents agents)))
+      (assoc component
+             :agents agents
+             :main-loop main-loop)))
 
   (stop [component]
     (if-let [main-loop (:main-loop component)]

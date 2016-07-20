@@ -7,10 +7,26 @@
                                                 [datomic :as d]
                                                 [jobs :as jobs])))
 
+(defn- restart [{:keys [agents datomic jobs]} execution class-loader-id]
+  (log/info "restart:" execution)
+  (ag/restart-execution
+     agents execution class-loader-id
+     :on-success (fn [resp]
+                   (d/transact datomic
+                               [{:db/id (:db/id execution)
+                                 :job-execution/execution-id (:execution-id resp)
+                                 :job-execution/batch-status (:batch-status resp)
+                                 :job-execution/start-time   (:start-time   resp)}])
+                   (ag/update-execution-by-id
+                    agents
+                    (:db/id execution)
+                    :on-success (fn [new-exec]
+                                  (jobs/save-execution jobs (:db/id execution) new-exec))))))
+
 (defn- dispatch [{:keys [dispatcher-ch datomic]} agt execution-request]
   (ag/execute-job
    agt execution-request
-   
+
    :on-error
    (fn [status e]
      (log/error "failure submit job [" (get-in execution-request [:job :job/name])
@@ -21,7 +37,7 @@
                      :job-execution/agent [:agent/instance-id (:agent/instance-id agt)]
                      :job-execution/batch-status :batch-status/abandoned}])
        (put! dispatcher-ch execution-request)))
-   
+
    :on-success
    (fn [{:keys [execution-id batch-status start-time] :as res}]
      (if execution-id
@@ -46,48 +62,69 @@
     (catch Exception ex
       (log/error "dispatch failure" ex))))
 
-(defn submitter [{:keys [jobs apps] :as dispatcher}]
+(defn submitter [{:keys [jobs apps datomic submitter-ch] :as dispatcher}]
   (go-loop []
-    (let [undispatched (jobs/find-undispatched jobs)]
-      (doseq [[execution-request job parameter] undispatched]
-        (log/info "submitter/dispatcher=" dispatcher)
-        (submit dispatcher
-                {:request-id execution-request
-                 :class-loader-id (:application/class-loader-id
-                                   (apps/find-by-name apps "default"))
-                 :job job
-                 :parameters parameter}))
-      (<! (timeout 2000))
-      (recur))))
+    (when-let [_ (<! submitter-ch)]
+      (let [undispatched (jobs/find-undispatched jobs)]
+        (doseq [[execution-request job parameter] undispatched]
+          (submit dispatcher
+                  {:request-id execution-request
+                   :class-loader-id (:application/class-loader-id
+                                     (apps/find-by-name apps "default"))
+                   :job job
+                   :restart? (= (some-> (d/pull datomic
+                                                '[:job-execution/batch-status]
+                                                execution-request)
+                                        :job-execution/batch-status
+                                        :db/ident)
+                                :batch-status/undispatched)
+                   :parameters parameter}))
+        (<! (timeout 2000))
+        (put! submitter-ch :continue)
+        (recur)))))
 
 (defrecord Dispatcher [datomic agents]
   component/Lifecycle
   (start [component]
-    (let [dispatcher-ch (chan)
+    (let [component (assoc component
+                           :submitter-ch  (chan)
+                           :dispatcher-ch (chan))
           main-loop (go-loop []
-                      (let [execution-request (<! dispatcher-ch)]
+                      (when-let [execution-request (<! (:dispatcher-ch component))]
                         (log/info "Dispatch request for " execution-request)
-                        (loop [agt (ag/find-agent agents), log-interval 0]
-                          (if agt
-                            (dispatch (assoc component :dispatcher-ch dispatcher-ch)
-                                      agt execution-request)
-                            (do
-                              (if (= (mod log-interval 10) 0)
-                                (log/info "No available agents for " execution-request))
-                              (<! (timeout 3000))
-                              (recur (ag/find-agent agents) (inc log-interval)))))
+                        (if (:restart? execution-request)
+                          (restart component
+                                   (d/pull datomic
+                                           '[:*
+                                             {:job-execution/agent [:*]}]
+                                           (:request-id execution-request))
+                                   (:class-loader-id execution-request))
+                          (loop [agt (ag/find-agent agents), log-interval 0]
+                            (if agt
+                              (dispatch component
+                                        agt execution-request)
+                              (do
+                                (if (= (mod log-interval 10) 0)
+                                  (log/info "No available agents for " execution-request))
+                                (<! (timeout 3000))
+                                (put! (:dispatcher-ch component) execution-request)
+                                ;(recur (ag/find-agent agents) (inc log-interval))
+                                ))))
                         (recur)))
-          submit-loop (submitter (assoc component
-                                        :dispatcher-ch dispatcher-ch))]
+          submit-loop (submitter component)]
+      (put! (:submitter-ch component) :start)
       (assoc component
-             :dispatcher-ch dispatcher-ch
              :main-loop main-loop
              :submit-loop submit-loop)))
 
   (stop [component]
-    (if-let [main-loop (:main-loop component)]
+    (when-let [dispatcher-ch (:dispatcher-ch component)]
+      (close! dispatcher-ch))
+    (when-let [submitter-ch (:submitter-ch component)]
+      (close! submitter-ch))
+    (when-let [main-loop (:main-loop component)]
       (close! main-loop))
-    (if-let [submit-loop (:submit-loop component)]
+    (when-let [submit-loop (:submit-loop component)]
       (close! submit-loop))
     (dissoc component :dispatch-ch :main-loop :submit-loop)))
 

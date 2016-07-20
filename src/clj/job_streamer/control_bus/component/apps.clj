@@ -23,6 +23,19 @@
                        (iterate
                         #(.getParent ^ClassLoader %) loader)))))
 
+(defn register-app [applications app]
+  (let [id (.registerClasspath
+            (ClassLoaderHolder/getInstance)
+            (into-array URL
+                        (map #(URL. %) (:application/classpaths app)))
+            (.getClassLoader (class tracer-bullet-fn)))]
+    (swap! applications assoc (:application/name app)
+           (assoc app
+                  :application/name "default"
+                  :application/class-loader-id id))
+    (log/info "Registered an application [" app "]")))
+
+
 (defn scan-components [classpaths]
   (when-let [java-cmd (some-> (System/getProperty "java.home") (str "/bin/java"))]
     (log/info "Scan batch components...")
@@ -79,9 +92,8 @@
                             :application/name "default" ;; Todo multi applications.
                             :application/description (:application/description app)
                             :application/classpaths (:application/classpaths app)}]))
-            (swap! applications assoc "default"
-                   (assoc app :application/name "default"))
-            
+            (register-app applications (assoc app :application/name "default"))
+
             (when-let [components (scan-components (:application/classpaths app))]
               (let [batch-component-id (find-batch-component datomic "default")]
                 (d/transact datomic
@@ -106,7 +118,7 @@
                                   (d/pull datomic '[:*]))
                       builtins {:batch-component/batchlet
                                 ["org.jobstreamer.batch.ShellBatchlet"]
-                                
+
                                 :batch-component/item-writer []
                                 :batch-component/item-processor []
                                 :batch-component/item-reader []}]
@@ -134,16 +146,7 @@
                         '{:find [[(pull ?app [*])]]
                           :where [[?app :application/name]]})]
       (doseq [app apps]
-        (let [id (.registerClasspath
-                  (ClassLoaderHolder/getInstance)
-                  (into-array URL
-                              (map #(URL. %) (:application/classpaths app)))
-                  (.getClassLoader (class tracer-bullet-fn)))]
-          (swap! applications assoc (:application/name app)
-               (assoc app
-                      :application/name "default"
-                      :application/class-loader-id id)))
-        (log/info "Registered an application [" app "]"))
+        (register-app applications app))
 
       (assoc component
              :applications applications)))
