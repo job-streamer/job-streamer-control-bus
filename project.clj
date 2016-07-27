@@ -63,4 +63,7 @@
                    :source-paths ["dev"]
                    :repl-options {:init-ns user}
                    :env {:port "45102"}}
-   :project/test {:dependencies [[junit "4.12"]]}})
+   :project/test {:dependencies [[junit "4.12"]
+                                [org.mockito/mockito-all "1.10.19"]
+                                [org.powermock/powermock-api-mockito "1.5.4"]
+                                [org.powermock/powermock-module-junit4 "1.5.4"]]}})

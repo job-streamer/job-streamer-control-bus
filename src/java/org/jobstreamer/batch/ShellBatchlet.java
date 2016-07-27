@@ -10,6 +10,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 
 import javax.batch.api.AbstractBatchlet;
 import javax.batch.operations.BatchRuntimeException;
@@ -26,7 +29,7 @@ import org.slf4j.LoggerFactory;
  * @author kawasima
  */
 public class ShellBatchlet extends AbstractBatchlet {
-    private static final Logger logger = LoggerFactory.getLogger(ShellBatchlet.class);
+    private final static Logger logger = LoggerFactory.getLogger(ShellBatchlet.class);
     private Process process;
 
     @Any
@@ -47,9 +50,18 @@ public class ShellBatchlet extends AbstractBatchlet {
         return scriptFile;
     }
 
-    private String executeScript(Path script) {
+    String executeScript(Path script) {
         String args = stepContext.getProperties().getProperty("args");
-        ProcessBuilder pb = new ProcessBuilder(script.toAbsolutePath().toString(),args);
+        ProcessBuilder pb = null;
+        String processToString = script.toAbsolutePath().toString();
+        if (args == null) {
+            pb = new ProcessBuilder(processToString);
+        } else {
+            List<String> processAndArgs = new ArrayList();
+            processAndArgs.add(processToString);
+            processAndArgs.addAll(Arrays.asList(args.split(" ")));
+            pb = new ProcessBuilder((String[]) processAndArgs.toArray(new String[0]));
+        }
         pb.redirectErrorStream(true);
 
         try {
@@ -62,6 +74,8 @@ public class ShellBatchlet extends AbstractBatchlet {
                     logger.info(line);
                 }
             }
+        } catch (Throwable e) {
+            e.printStackTrace();
         } finally {
             if (process != null) {
                 try {
