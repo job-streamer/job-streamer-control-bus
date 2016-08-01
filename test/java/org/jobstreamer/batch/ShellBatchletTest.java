@@ -21,17 +21,16 @@ import ch.qos.logback.classic.Logger;
 @RunWith(PowerMockRunner.class)
 @PrepareForTest({ShellBatchlet.class,Logger.class})
 public class ShellBatchletTest {
-    private static final String BAT_FILE_PATH = "test/resources/test.bat";
-
+	private static final String BAT_FILE_PATH = "test/resources/test.bat";
+	private static final String SHELL_FILE_PATH = "test/resources/test";
     private static final String TEST_MESSAGE = "test";
-
     private final static ShellBatchlet TARGET = new ShellBatchlet();
 
     private StepContext sc = mock (StepContext.class);
-
-    Properties properties = new Properties();
-
-    Logger logger = Mockito.mock(Logger.class);
+    private Properties properties = new Properties();
+    private Logger logger = Mockito.mock(Logger.class);
+    private boolean isWindows = System.getProperty("os.name").startsWith("Windows");
+    private String fileName;
 
     @Before
     public void setup() throws Throwable{
@@ -39,14 +38,14 @@ public class ShellBatchletTest {
          Field f= TARGET.getClass().getDeclaredField("stepContext");
          f.set(TARGET, sc);
          setFinalStatic(ShellBatchlet.class.getDeclaredField("logger"),logger);
+         fileName =isWindows ? BAT_FILE_PATH : SHELL_FILE_PATH;
 
     }
+    
     @Test
-    public void args指定なし() throws Throwable{
+    public void args0() throws Throwable{
         when(sc.getProperties()).thenReturn(properties);
-        //for windows
-        TARGET.executeScript(Paths.get(BAT_FILE_PATH));
-        //TODO:create linux version
+        TARGET.executeScript(Paths.get(fileName));
         verify(logger,never()).info(TEST_MESSAGE);
 
 
@@ -55,23 +54,19 @@ public class ShellBatchletTest {
     }
 
     @Test
-    public void args指定一つ() throws Throwable{
+    public void args1() throws Throwable{
         properties.setProperty("args", TEST_MESSAGE);
         when(sc.getProperties()).thenReturn(properties);
-        //for windows
-        TARGET.executeScript(Paths.get(BAT_FILE_PATH));
-        //TODO:create linux version
+        TARGET.executeScript(Paths.get(fileName));
 
         verify(logger,times(1)).info(TEST_MESSAGE);
     }
 
     @Test
-    public void args指定複数() throws Throwable{
+    public void args2() throws Throwable{
         properties.setProperty("args", TEST_MESSAGE + " " + TEST_MESSAGE);
         when(sc.getProperties()).thenReturn(properties);
-        //for windows
-        TARGET.executeScript(Paths.get(BAT_FILE_PATH));
-        //TODO:create linux version
+        TARGET.executeScript(Paths.get(fileName));
 
         verify(logger,times(2)).info(TEST_MESSAGE);
     }
