@@ -282,7 +282,7 @@
    :put! (fn [{job :edn job-id :job-id}]
            (d/transact datomic (edn->datoms job job-id)))
    :delete! (fn [{job-id :job-id app-id :app-id}]
-              (scheduler/unschedule job-id)
+              (scheduler/unschedule scheduler job-id)
               (d/transact datomic
                           [[:db.fn/retractEntity job-id]
                            [:db/retract app-id :application/jobs job-id]]))
