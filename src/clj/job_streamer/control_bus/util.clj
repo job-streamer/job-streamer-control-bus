@@ -130,7 +130,7 @@
   (when (#{:put :post} (get-in context [:request :request-method]))
     (try
       (if-let [body (body-as-string context)]
-        (case (content-type (:request context))
+        (case (or (content-type (:request context)) (get-in context [:request :content-type]))
           "application/edn" [false {:edn (edn/read-string body)}]
           "application/xml" [false {:edn (xml->edn body)}]
           false)
