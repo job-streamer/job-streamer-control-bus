@@ -52,16 +52,14 @@ public class ShellBatchlet extends AbstractBatchlet {
 
     String executeScript(Path script) {
         String args = stepContext.getProperties().getProperty("args");
-        ProcessBuilder pb = null;
         String processToString = script.toAbsolutePath().toString();
-        if (args == null) {
-            pb = new ProcessBuilder(processToString);
-        } else {
-            List<String> processAndArgs = new ArrayList();
-            processAndArgs.add(processToString);
-            processAndArgs.addAll(Arrays.asList(args.split(" ")));
-            pb = new ProcessBuilder((String[]) processAndArgs.toArray(new String[0]));
+        List<String> processAndArgs = new ArrayList();
+        processAndArgs.add(processToString);
+        
+        if (args != null && !args.isEmpty()) {
+            processAndArgs.addAll(Arrays.asList(args.split("\\s+")));
         }
+        ProcessBuilder pb = new ProcessBuilder(processAndArgs);
         pb.redirectErrorStream(true);
 
         try {
