@@ -2,8 +2,8 @@
   (:require [clojure.tools.logging :as log]
             [clojure.edn :as edn]
             [clojure.java.io :as io]
-            [datomic.api :as d])
-  (:use [ring.util.request :only [content-type]])
+            [datomic.api :as d]
+            [ring.util.request :refer [content-type]])
   (:import [org.jsoup Jsoup]))
 
 (defn to-int [n default-value]
