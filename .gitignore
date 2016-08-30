@@ -8,3 +8,6 @@ pom.xml
 *.iml
 /lib
 /rrd
+.project
+.classpath
+.settings

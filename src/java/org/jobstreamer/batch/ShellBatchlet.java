@@ -1,13 +1,5 @@
 package org.jobstreamer.batch;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import javax.batch.api.AbstractBatchlet;
-import javax.batch.operations.BatchRuntimeException;
-import javax.batch.runtime.context.StepContext;
-import javax.enterprise.inject.Any;
-import javax.inject.Inject;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
@@ -18,6 +10,18 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+
+import javax.batch.api.AbstractBatchlet;
+import javax.batch.operations.BatchRuntimeException;
+import javax.batch.runtime.context.StepContext;
+import javax.enterprise.inject.Any;
+import javax.inject.Inject;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * A builtin batchlet for running a shellscript.
@@ -25,7 +29,7 @@ import java.nio.file.StandardCopyOption;
  * @author kawasima
  */
 public class ShellBatchlet extends AbstractBatchlet {
-    private static final Logger logger = LoggerFactory.getLogger(ShellBatchlet.class);
+    private final static Logger logger = LoggerFactory.getLogger(ShellBatchlet.class);
     private Process process;
 
     @Any
@@ -46,8 +50,16 @@ public class ShellBatchlet extends AbstractBatchlet {
         return scriptFile;
     }
 
-    private String executeScript(Path script) {
-        ProcessBuilder pb = new ProcessBuilder(script.toAbsolutePath().toString());
+    String executeScript(Path script) {
+        String args = stepContext.getProperties().getProperty("args");
+        String processToString = script.toAbsolutePath().toString();
+        List<String> processAndArgs = new ArrayList();
+        processAndArgs.add(processToString);
+        
+        if (args != null && !args.isEmpty()) {
+            processAndArgs.addAll(Arrays.asList(args.split("\\s+")));
+        }
+        ProcessBuilder pb = new ProcessBuilder(processAndArgs);
         pb.redirectErrorStream(true);
 
         try {
@@ -60,6 +72,8 @@ public class ShellBatchlet extends AbstractBatchlet {
                     logger.info(line);
                 }
             }
+        } catch (Throwable e) {
+            e.printStackTrace();
         } finally {
             if (process != null) {
                 try {
