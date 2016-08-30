@@ -2,7 +2,8 @@
   (:require [clojure.tools.logging :as log]
             [clojure.edn :as edn]
             [clojure.java.io :as io]
-            [datomic.api :as d])
+            [datomic.api :as d]
+            [ring.util.request :refer [content-type]])
   (:import [org.jsoup Jsoup]))
 
 (defn to-int [n default-value]
@@ -34,7 +35,7 @@
         job-id (or job-id (d/tempid :db.part/user)) ]
     (concat [{:db/id job-id
               :job/name (:job/name job)
-              :job/restartable? (get job :job/restartable? true) 
+              :job/restartable? (get job :job/restartable? true)
               :job/edn-notation (pr-str job)
               :job/steps step-refs
               :job/exclusive? (get job :job/exclusive? false)}]
@@ -129,7 +130,7 @@
   (when (#{:put :post} (get-in context [:request :request-method]))
     (try
       (if-let [body (body-as-string context)]
-        (case (get-in context [:request :content-type])
+        (case (or (content-type (:request context)) (get-in context [:request :content-type]))
           "application/edn" [false {:edn (edn/read-string body)}]
           "application/xml" [false {:edn (xml->edn body)}]
           false)
