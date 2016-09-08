@@ -3,7 +3,8 @@
             [clojure.edn :as edn]
             [clojure.java.io :as io]
             [datomic.api :as d]
-            [ring.util.request :refer [content-type]])
+            [ring.util.request :refer [content-type]]
+            [clojure.data.json :as json])
   (:import [org.jsoup Jsoup]))
 
 (defn to-int [n default-value]
@@ -126,6 +127,11 @@
       java.lang.String body
       (slurp (io/reader body)))))
 
+(defn json->edn
+  "Convert a format from JSON to edn"
+  [json]
+  (json/read-str json :key-fn keyword))
+
 (defn parse-body [context]
   (when (#{:put :post} (get-in context [:request :request-method]))
     (try
@@ -133,6 +139,7 @@
         (case (or (content-type (:request context)) (get-in context [:request :content-type]))
           "application/edn" [false {:edn (edn/read-string body)}]
           "application/xml" [false {:edn (xml->edn body)}]
+          "application/json" [false {:edn (json->edn body)}]
           false)
         false)
       (catch Exception e
