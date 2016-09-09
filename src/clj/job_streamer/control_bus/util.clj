@@ -127,10 +127,17 @@
       java.lang.String body
       (slurp (io/reader body)))))
 
+(defn json-value-reader [key value]
+  (if (= key :calendar/holidays)
+    (java.sql.Date/valueOf value)
+    value))
+
 (defn json->edn
   "Convert a format from JSON to edn"
   [json]
-  (json/read-str json :key-fn keyword))
+  (json/read-str json
+                 :key-fn keyword
+                 :value-fn json-value-reader))
 
 (defn parse-body [context]
   (when (#{:put :post} (get-in context [:request :request-method]))

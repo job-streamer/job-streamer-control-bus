@@ -134,7 +134,7 @@
 
 (defn entry-resource [{:keys [datomic] :as scheduler} job-id & [cmd]]
   (liberator/resource
-   :available-media-types ["application/edn"]
+   :available-media-types ["application/edn" "application/json"]
    :allowed-methods [:post :put :delete]
    :malformed? #(parse-body %)
    :exists? (fn [ctx]

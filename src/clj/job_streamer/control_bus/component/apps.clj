@@ -71,7 +71,7 @@
 
 (defn list-resource [{:keys [datomic applications]}]
   (liberator/resource
-   :available-media-types ["application/edn"]
+   :available-media-types ["application/edn" "application/json"]
    :allowed-methods [:get :post]
    :malformed? #(validate (parse-body %)
                           :application/name v/required
@@ -106,7 +106,7 @@
 
 (defn batch-components-resource [{:keys [datomic]} app-name]
   (liberator/resource
-   :available-media-types ["application/edn"]
+   :available-media-types ["application/edn" "application/json"]
    :allowed-methods [:get]
    :handle-ok (fn [ctx]
                 (let [in-app (->> (d/query datomic
@@ -126,7 +126,7 @@
 
 (defn stats-resource [{:keys [datomic agents]} app-name]
   (liberator/resource
-   :available-media-types ["application/edn"]
+   :available-media-types ["application/edn" "application/json"]
    :allowed-methods [:get]
    :handle-ok (fn [ctx]
                 {:agents (count (ag/available-agents agents))

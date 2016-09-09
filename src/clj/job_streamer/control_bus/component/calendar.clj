@@ -20,7 +20,7 @@
 
 (defn list-resource [{:keys [datomic scheduler]}]
   (liberator/resource
-   :available-media-types ["application/edn"]
+   :available-media-types ["application/edn" "application/json"]
    :allowed-methods [:get :post]
    :malformed? #(validate (parse-body %)
                           :calendar/name v/required)
@@ -35,6 +35,7 @@
                 true))
 
    :post! (fn [{cal :edn}]
+            (println cal)
             (let [id (or (:db/id cal) (d/tempid :db.part/user))]
               (if-let [old-id (d/query datomic
                                        '{:find [?calendar .]
@@ -64,7 +65,7 @@
 
 (defn entry-resource [{:keys [datomic scheduler]} name]
   (liberator/resource
-   :available-media-types ["application/edn"]
+   :available-media-types ["application/edn" "application/json"]
    :allowed-methods [:get :put :delete]
    :malformed? (fn [ctx]
                  (or (validate (parse-body ctx)
@@ -77,7 +78,7 @@
                      '{:find [(pull ?e [:*]) .]
                        :in [$ ?n]
                        :where [[?e :calendar/name ?n]]} name)
-   
+
    :put! (fn [{cal :edn}]
            (d/transact datomic
                        [{:db/id (:db/id cal)

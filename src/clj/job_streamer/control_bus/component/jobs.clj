@@ -212,7 +212,7 @@
 
 (defn list-resource [{:keys [datomic scheduler] :as jobs} app-name]
   (liberator/resource
-   :available-media-types ["application/edn"]
+   :available-media-types ["application/edn" "application/json"]
    :allowed-methods [:get :post]
    :malformed? (fn [ctx]
                  (validate (parse-body ctx)
@@ -273,7 +273,7 @@
 
 (defn entry-resource [{:keys [datomic scheduler] :as jobs} app-name job-name]
   (liberator/resource
-   :available-media-types ["application/edn"]
+   :available-media-types ["application/edn" "application/json"]
    :allowed-methods [:get :put :delete]
    :malformed? #(parse-body %)
    :exists? (when-let [[app-id job-id] (find-by-name jobs app-name job-name)]
@@ -325,7 +325,7 @@
 
 (defn job-settings-resource [{:keys [datomic] :as jobs} app-name job-name & [cmd]]
   (liberator/resource
-   :available-media-types ["application/edn"]
+   :available-media-types ["application/edn" "application/json"]
   :allowed-methods [:get :delete :put]
   :malformed? #(parse-body %)
   :exists? (when-let [[app-id job-id] (find-by-name jobs app-name job-name)]
@@ -426,7 +426,7 @@
 
 (defn executions-resource [{:keys [datomic] :as jobs} app-name job-name]
   (liberator/resource
-   :available-media-types ["application/edn"]
+   :available-media-types ["application/edn" "application/json"]
    :allowed-methods [:get :post]
    :malformed? #(parse-body %)
    :exists? (when-let [[app-id job-id] (find-by-name jobs app-name job-name)]
@@ -460,7 +460,7 @@
 
 (defn execution-resource [{:keys [agents scheduler datomic] :as jobs} id & [cmd]]
   (liberator/resource
-   :available-media-types ["application/edn"]
+   :available-media-types ["application/edn" "application/json"]
    :allowed-methods [:get :put]
    :malformed? #(parse-body %)
    :exists? (fn [ctx]
