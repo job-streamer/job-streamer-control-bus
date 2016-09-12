@@ -129,7 +129,7 @@
 
 (defn json-value-reader [key value]
   (if (= key :calendar/holidays)
-    (java.sql.Date/valueOf value)
+    (for [date value] (java.sql.Date/valueOf date))
     value))
 
 (defn json->edn
