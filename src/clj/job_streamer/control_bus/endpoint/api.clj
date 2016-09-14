@@ -5,6 +5,7 @@
             [clojure.tools.logging :as log]
             [compojure.core :refer [ANY GET routes]]
             [bouncer.validators :as v]
+            [ring.util.response :refer [content-type]]
             (job-streamer.control-bus.component
              [apps :as apps]
              [jobs :as jobs]
@@ -75,6 +76,8 @@
      (apps/batch-components-resource apps app-name))
    (ANY "/:app-name/stats" [app-name]
      (apps/stats-resource apps app-name))
+   (GET "/version" [] (-> {:body  (clojure.string/replace (str "\"" (slurp "VERSION") "\"") "\n" "")}
+                                       (content-type "text/plain")))
 
    ;; For debug
    ;(GET "/logs" [] (pr-str (model/query '{:find [[(pull ?log [*]) ...]] :where [[?log :execution-log/level]]})))
