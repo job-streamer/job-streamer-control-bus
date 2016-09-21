@@ -71,3 +71,15 @@
         (is (= 201 (-> (handler request) :status))))
       (let [res (jobs/find-all (:jobs system) "default" nil)]
         (is (= 1 (:hits res)))))))
+
+(deftest parse-query
+  (testing "parse-query"
+    (println (jobs/parse-query "a b since:2016-09-01 batch-status:COMP"))
+    (is (="a" (first (:job-names (jobs/parse-query "a b")))))))
+
+(deftest find-all-with-query
+  (testing "find-all"
+    (let [system (new-system config)]
+      (let [res (jobs/find-all (:jobs system) "default" "exit-status:COMP")]
+        (is (= 0 (:hits res)))
+        (is (empty? (:results res)))))))

@@ -4,6 +4,8 @@
             [com.stuartsierra.component :as component]
             [bouncer.validators :as v]
             [liberator.core :as liberator]
+            [clojure.string :as str]
+
             (job-streamer.control-bus [notification :as notification]
                                       [validation :refer [validate]]
                                       [util :refer [parse-body edn->datoms to-int]])
@@ -12,7 +14,7 @@
                                                 [scheduler :as scheduler]))
   (:import [java.util Date]))
 
-(defn- find-latest-execution
+(defn find-latest-execution
   "Find latest from given executions."
   [executions]
   (when executions
@@ -68,18 +70,79 @@
              [?job :job/name ?job-name]]}
    app-name job-name))
 
+(defn parse-query [query]
+  (loop [query-vector (str/split query #"\s")
+       query-map {:job-names []}]
+  (if-let [query-unit (first query-vector)]
+    (if (.startsWith query-unit "since:")
+      (recur (rest query-vector) (assoc query-map :since (.substring query-unit 6)))
+      (if (.startsWith query-unit "until:")
+          (recur (rest query-vector) (assoc query-map :until (.substring query-unit 6)))
+           (if (.startsWith query-unit "exit-status:")
+          (recur (rest query-vector) (assoc query-map :exit-status (.substring query-unit 12)))
+                (recur (rest query-vector) (update-in query-map [:job-names] conj query-unit)))))
+    query-map)))
 
 (defn find-all [{:keys [datomic]} app-name query & [offset limit]]
-  (let [base-query '{:find [?job]
-                     :in [$ ?app-name ?query]
+  (let [query-map (if query (parse-query query) nil)
+        base-query '{:find [?job]
+                     :in [$ ?app-name ?job-name-condition ?since-condition ?until-condition ?exit-status-condition]
                      :where [[?app :application/name ?app-name]
-                             [?app :application/jobs ?job]]}
+                             [?app :application/jobs ?job]
+                             [?job :job/name ?job-name]]}
+        job-name-condition (:job-names query-map)
+        since-condition (:since query-map)
+        until-condition (:until query-map)
+        exit-status-condition (:exit-status query-map)
         jobs (d/query datomic
-                      (if (not-empty query)
-                        (update-in base-query [:where]
-                                   conj '[(fulltext $ :job/name ?query) [[?job ?job-name]]])
-                            base-query)
-                      app-name (or query ""))]
+                      (cond-> base-query
+                              (not-empty job-name-condition)
+                              (update-in [:where] conj
+                                    '[(.contains ^String ?job-name ?job-name-condition)])
+                              (or since-condition until-condition exit-status-condition)
+                              (update-in [:where] conj
+                                          '[?job :job/executions ?job-executions]
+                                          '[(job-streamer.control-bus.component.jobs/find-latest-execution ?job-executions) ?last-execution]
+                                          '[?last-execution :job-execution/exit-status ?exit-status]
+                                          '[?last-execution :job-execution/end-time ?end-time])
+                              since-condition
+                              (update-in [:where] conj
+                                         '[(<= ?end-time ?since-condition)])
+                              until-condition
+                              (update-in [:where] conj
+                                         '[(>= ?end-time ?until-condition)])
+                              exit-status-condition
+                              (update-in [:where] conj
+                                         '[(.contains ^String ?exit-status ?exit-status-condition)]))
+                      app-name
+                      (or (some-> query-map :job-names first) "")
+                      (or since-condition "")
+                      (or until-condition "")
+                      (or exit-status-condition ""))]
+    (println query-map)
+    (println job-name-condition)
+    (println exit-status-condition)
+    (println (or since-condition until-condition exit-status-condition))
+    (println (cond-> base-query
+                              (not-empty job-name-condition)
+                              (update-in [:where] conj
+                                    '[(.contains ^String ?job-name ?job-name-condition)])
+                              (or since-condition until-condition exit-status-condition)
+                              (update-in [:where] conj
+                                          '[?job :job/executions ?job-executions]
+                                          '[(job-streamer.control-bus.component.jobs/find-latest-execution ?job-executions) ?last-execution]
+                                          '[?last-execution :job-execution/exit-status ?exit-status]
+                                          '[?last-execution :job-execution/end-time ?end-time])
+                              since-condition
+                              (update-in [:where] conj
+                                         '[(<= ?end-time ?since-condition)])
+                              until-condition
+                              (update-in [:where] conj
+                                         '[(>= ?end-time ?until-condition)])
+                              (nil? exit-status-condition)
+                              (update-in [:where] conj
+                                         '[(.contains ^String ?exit-status ?exit-status-condition)])))
+
     {:results (->> jobs
                    (drop (dec (or offset 0)))
                    (take (or limit 20))
