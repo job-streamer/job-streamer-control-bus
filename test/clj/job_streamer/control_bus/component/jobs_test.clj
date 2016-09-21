@@ -74,8 +74,11 @@
 
 (deftest parse-query
   (testing "parse-query"
-    (println (jobs/parse-query "a b since:2016-09-01 exit-status:COMP"))
-    (is (="a" (first (:job-names (jobs/parse-query "a b")))))))
+    (let [result (jobs/parse-query "a b since:2016-09-01 until:2016-09-02 exit-status:COMPLETED")]
+      (is (= "a" (first (:job-names result))))
+      (is (= (java.sql.Date/valueOf "2016-09-01")  (:since result)))
+      (is (= (java.sql.Date/valueOf "2016-09-02")  (:until result)))
+      (is (=  "COMPLETED" (:exit-status result))))))
 
 (deftest find-all-with-query
   (testing "find-all"
