@@ -75,9 +75,9 @@
        query-map {:job-names []}]
   (if-let [query-unit (first query-vector)]
     (if (.startsWith query-unit "since:")
-      (recur (rest query-vector) (assoc query-map :since (.substring query-unit 6)))
+      (recur (rest query-vector) (assoc query-map :since (java.sql.Date/valueOf (.substring query-unit 6))))
       (if (.startsWith query-unit "until:")
-          (recur (rest query-vector) (assoc query-map :until (.substring query-unit 6)))
+          (recur (rest query-vector) (assoc query-map :until (java.sql.Date/valueOf (.substring query-unit 6))))
            (if (.startsWith query-unit "exit-status:")
           (recur (rest query-vector) (assoc query-map :exit-status (.substring query-unit 12)))
                 (recur (rest query-vector) (update-in query-map [:job-names] conj query-unit)))))
@@ -139,7 +139,7 @@
                               until-condition
                               (update-in [:where] conj
                                          '[(>= ?end-time ?until-condition)])
-                              (nil? exit-status-condition)
+                               exit-status-condition
                               (update-in [:where] conj
                                          '[(.contains ^String ?exit-status ?exit-status-condition)])))
 

@@ -74,7 +74,7 @@
 
 (deftest parse-query
   (testing "parse-query"
-    (println (jobs/parse-query "a b since:2016-09-01 batch-status:COMP"))
+    (println (jobs/parse-query "a b since:2016-09-01 exit-status:COMP"))
     (is (="a" (first (:job-names (jobs/parse-query "a b")))))))
 
 (deftest find-all-with-query
