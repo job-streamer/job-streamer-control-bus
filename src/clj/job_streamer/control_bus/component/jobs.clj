@@ -119,29 +119,6 @@
                       (or since-condition "")
                       (or until-condition "")
                       (or exit-status-condition ""))]
-    (println query-map)
-    (println job-name-condition)
-    (println exit-status-condition)
-    (println (or since-condition until-condition exit-status-condition))
-    (println (cond-> base-query
-                              (not-empty job-name-condition)
-                              (update-in [:where] conj
-                                    '[(.contains ^String ?job-name ?job-name-condition)])
-                              (or since-condition until-condition exit-status-condition)
-                              (update-in [:where] conj
-                                          '[?job :job/executions ?job-executions]
-                                          '[(job-streamer.control-bus.component.jobs/find-latest-execution ?job-executions) ?last-execution]
-                                          '[?last-execution :job-execution/exit-status ?exit-status]
-                                          '[?last-execution :job-execution/end-time ?end-time])
-                              since-condition
-                              (update-in [:where] conj
-                                         '[(<= ?end-time ?since-condition)])
-                              until-condition
-                              (update-in [:where] conj
-                                         '[(>= ?end-time ?until-condition)])
-                               exit-status-condition
-                              (update-in [:where] conj
-                                         '[(.contains ^String ?exit-status ?exit-status-condition)])))
 
     {:results (->> jobs
                    (drop (dec (or offset 0)))
