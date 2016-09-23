@@ -79,10 +79,3 @@
       (is (= (java.sql.Date/valueOf "2016-09-01")  (:since result)))
       (is (= (java.sql.Date/valueOf "2016-09-02")  (:until result)))
       (is (=  "COMPLETED" (:exit-status result))))))
-
-(deftest find-all-with-query
-  (testing "find-all"
-    (let [system (new-system config)]
-      (let [res (jobs/find-all (:jobs system) "default" "exit-status:COMP")]
-        (is (= 0 (:hits res)))
-        (is (empty? (:results res)))))))

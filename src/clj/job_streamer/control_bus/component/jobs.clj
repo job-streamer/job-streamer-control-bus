@@ -102,15 +102,16 @@
                               (or since-condition until-condition exit-status-condition)
                               (update-in [:where] conj
                                           '[?job :job/executions ?job-executions]
-                                          '[(job-streamer.control-bus.component.jobs/find-latest-execution ?job-executions) ?last-execution]
-                                          '[?last-execution :job-execution/exit-status ?exit-status]
-                                          '[?last-execution :job-execution/end-time ?end-time])
+                                          '[?job-execution :job-execution/create-time ?create-time]
+                                          '[(max ?create-time)]
+                                          '[?job-executions :job-execution/exit-status ?exit-status]
+                                          '[?job-executions :job-execution/end-time ?end-time])
                               since-condition
                               (update-in [:where] conj
-                                         '[(<= ?end-time ?since-condition)])
+                                         '[(>= ?end-time ?since-condition)])
                               until-condition
                               (update-in [:where] conj
-                                         '[(>= ?end-time ?until-condition)])
+                                         '[(<= ?end-time ?until-condition)])
                               exit-status-condition
                               (update-in [:where] conj
                                          '[(.contains ^String ?exit-status ?exit-status-condition)]))
@@ -308,7 +309,8 @@
                                                                                                              :status-notification/exit-status
                                                                                                              :status-notification/type] (:db/id sn))))
                                                                                             vec)}))))))
-                                   vec))))))
+                                   vec))))
+    :etag (str (int (/ (System/currentTimeMillis) 10000)))))
 
 
 (defn entry-resource [{:keys [datomic scheduler] :as jobs} app-name job-name]
