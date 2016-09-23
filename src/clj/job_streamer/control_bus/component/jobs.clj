@@ -86,7 +86,7 @@
 (defn find-all [{:keys [datomic]} app-name query & [offset limit]]
   (let [query-map (if query (parse-query query) nil)
         base-query '{:find [?job]
-                     :in [$ ?app-name ?job-name-condition ?since-condition ?until-condition ?exit-status-condition]
+                     :in [$ ?app-name [?job-name-condition ...] ?since-condition ?until-condition ?exit-status-condition]
                      :where [[?app :application/name ?app-name]
                              [?app :application/jobs ?job]
                              [?job :job/name ?job-name]]}
@@ -116,7 +116,7 @@
                               (update-in [:where] conj
                                          '[(.contains ^String ?exit-status ?exit-status-condition)]))
                       app-name
-                      (or (some-> query-map :job-names first) "")
+                      (or job-name-condition [""])
                       (or since-condition "")
                       (or until-condition "")
                       (or exit-status-condition ""))]
