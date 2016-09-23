@@ -88,8 +88,7 @@
         base-query '{:find [?job]
                      :in [$ ?app-name [?job-name-condition ...] ?since-condition ?until-condition ?exit-status-condition]
                      :where [[?app :application/name ?app-name]
-                             [?app :application/jobs ?job]
-                             [?job :job/name ?job-name]]}
+                             [?app :application/jobs ?job]]}
         job-name-condition (:job-names query-map)
         since-condition (:since query-map)
         until-condition (:until query-map)
@@ -98,7 +97,8 @@
                       (cond-> base-query
                               (not-empty job-name-condition)
                               (update-in [:where] conj
-                                    '[(.contains ^String ?job-name ?job-name-condition)])
+                                         '[?job :job/name ?job-name]
+                                         '[(.contains ^String ?job-name ?job-name-condition)])
                               (or since-condition until-condition exit-status-condition)
                               (update-in [:where] conj
                                           '[?job :job/executions ?job-executions]
@@ -116,7 +116,7 @@
                               (update-in [:where] conj
                                          '[(.contains ^String ?exit-status ?exit-status-condition)]))
                       app-name
-                      (or job-name-condition [""])
+                      (or (not-empty job-name-condition) [""])
                       (or since-condition "")
                       (or until-condition "")
                       (or exit-status-condition ""))]
