@@ -15,6 +15,7 @@
                  [com.datomic/datomic-free "0.9.5372" :exclusions [org.slf4j/slf4j-api org.slf4j/slf4j-nop
                                                                    com.amazonaws/aws-java-sdk]]
                  [org.jsoup/jsoup "1.9.2"]
+                 [org.clojure/data.json "0.2.6"]
                  [datomic-schema "1.3.0"]
                  [liberator "0.14.1"]
                  [compojure "1.5.1"]
