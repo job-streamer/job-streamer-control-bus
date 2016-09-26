@@ -71,3 +71,11 @@
         (is (= 201 (-> (handler request) :status))))
       (let [res (jobs/find-all (:jobs system) "default" nil)]
         (is (= 1 (:hits res)))))))
+
+(deftest parse-query
+  (testing "parse-query"
+    (let [result (jobs/parse-query "a b since:2016-09-01 until:2016-09-02 exit-status:COMPLETED")]
+      (is (= "a" (first (:job-names result))))
+      (is (= (java.sql.Date/valueOf "2016-09-01")  (:since result)))
+      (is (= (java.sql.Date/valueOf "2016-09-02")  (:until result)))
+      (is (=  "COMPLETED" (:exit-status result))))))
