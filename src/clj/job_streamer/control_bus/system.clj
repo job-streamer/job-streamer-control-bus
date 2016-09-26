@@ -21,7 +21,8 @@
              [socketapp  :refer [socketapp-component]])
             (job-streamer.control-bus.endpoint
              [api :refer [api-endpoint]])
-            [job-streamer.control-bus.endpoint.api :refer [api-endpoint]]))
+            [job-streamer.control-bus.endpoint.api :refer [api-endpoint]])
+  (:use ring.middleware.stacktrace))
 
 
 (defn wrap-same-origin-policy [handler alias]
@@ -38,7 +39,9 @@
 (def base-config
   {:app {:middleware [[wrap-not-found :not-found]
                       [wrap-same-origin-policy :same-origin]
-                      [wrap-defaults :defaults]]
+                      [wrap-defaults :defaults]
+                      [ring.middleware.stacktrace/wrap-stacktrace :stacktrace]]
+
          :not-found  "Resource Not Found"
          :defaults  (meta-merge api-defaults {})}})
 
