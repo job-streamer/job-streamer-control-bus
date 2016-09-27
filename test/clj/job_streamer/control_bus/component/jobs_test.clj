@@ -11,7 +11,8 @@
             [clojure.test :refer :all]
             [clojure.pprint :refer :all]
             [clojure.edn :as edn]
-            [clj-time.format :as f]))
+            [clj-time.format :as f])
+  (:import [org.joda.time DateTime]))
 
 
 
@@ -77,8 +78,8 @@
   (testing "parse-query"
     (let [result (jobs/parse-query "a b since:2016-09-01 until:2016-09-02 exit-status:COMPLETED")]
       (is (= "a" (first (:job-name result))))
-      (is (= "2016-09-01" (f/unparse (:date f/formatters) (:since result))))
-      (is (= "2016-09-02" (f/unparse (:date f/formatters) (:until result))))
+      (is (= "2016-09-01" (some->> result :since (new DateTime) (f/unparse (:date f/formatters)))))
+      (is (= "2016-09-02" (some->> result :until (new DateTime) (f/unparse (:date f/formatters)))))
       (is (=  "COMPLETED" (:exit-status result)))))
   (testing "nil query returns nil"
     (let [result (jobs/parse-query nil)]
@@ -86,10 +87,6 @@
   (testing "empty query returns nil"
     (let [result (jobs/parse-query "")]
       (is (nil? result))))
-
-  (testing "single simple query"
-    (let [result (jobs/parse-query "a")]
-      (is (= {:job-name '("a")} result))))
 
   (testing "single simple query"
     (let [result (jobs/parse-query "a")]
