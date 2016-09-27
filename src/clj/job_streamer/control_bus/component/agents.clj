@@ -14,7 +14,7 @@
 
 (defn list-resource [{:keys [agents]}]
   (liberator/resource
-   :available-media-types ["application/edn"]
+   :available-media-types ["application/edn" "application/json"]
    :allowed-methods [:get]
    :handle-ok (fn [ctx]
                 (->> (vals @agents)
@@ -35,7 +35,7 @@
 
 (defn entry-resource [{:keys [agents datomic]} instance-id & [cmd]]
   (liberator/resource
-   :available-media-types ["application/edn"]
+   :available-media-types ["application/edn" "application/json"]
    :allowed-methods [:get :put]
    :put! (fn [ctx]
            (when-let [uuid (UUID/fromString instance-id)]

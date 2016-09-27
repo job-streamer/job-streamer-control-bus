@@ -2,8 +2,11 @@
   (:require [clojure.tools.logging :as log]
             [clojure.edn :as edn]
             [com.stuartsierra.component :as component]
+            [bouncer.core :as b]
             [bouncer.validators :as v]
             [liberator.core :as liberator]
+            [clojure.string :as str]
+            [clj-time.format :as f]
             (job-streamer.control-bus [notification :as notification]
                                       [validation :refer [validate]]
                                       [util :refer [parse-body edn->datoms to-int]])
@@ -12,7 +15,7 @@
                                                 [scheduler :as scheduler]))
   (:import [java.util Date]))
 
-(defn- find-latest-execution
+(defn find-latest-execution
   "Find latest from given executions."
   [executions]
   (when executions
@@ -68,18 +71,71 @@
              [?job :job/name ?job-name]]}
    app-name job-name))
 
+(defn- parse-query-since [q]
+  (let [since (.substring q (count "since:"))]
+    (when (b/valid? {:since since}
+                    :since [[v/datetime (:date f/formatters)]])
+      {:since (f/parse (:date f/formatters) since)})))
+
+(defn- parse-query-until [q]
+  (let [until (.substring q (count "until:"))]
+    (when (b/valid? {:until until}
+                    :until [[v/datetime (:date f/formatters)]])
+      {:until (f/parse (:date f/formatters) until)})))
+
+(defn- parse-query-exit-status [q]
+  (let [exit-status (.substring q (count "exit-status:"))]
+    (when (b/valid? {:exit-status exit-status}
+                    :exit-status v/required)
+      {:exit-status exit-status})))
+
+(defn parse-query [query]
+  (when (not-empty query)
+    (->> (str/split query #"\s")
+         (map #(cond
+                 (.startsWith % "since:") (parse-query-since %)
+                 (.startsWith % "until:") (parse-query-until %)
+                 (.startsWith % "exit-status:") (parse-query-exit-status %)
+                 :default {:job-name [%]}))
+         (apply merge-with concat {:job-name nil}))))
 
 (defn find-all [{:keys [datomic]} app-name query & [offset limit]]
-  (let [base-query '{:find [?job]
-                     :in [$ ?app-name ?query]
+  (let [qmap (parse-query query)
+        base-query '{:find [?job]
+                     :in [$ ?app-name [?job-name-condition ...] ?since-condition ?until-condition ?exit-status-condition]
                      :where [[?app :application/name ?app-name]
                              [?app :application/jobs ?job]]}
         jobs (d/query datomic
-                      (if (not-empty query)
-                        (update-in base-query [:where]
-                                   conj '[(fulltext $ :job/name ?query) [[?job ?job-name]]])
-                            base-query)
-                      app-name (or query ""))]
+                      (cond-> base-query
+                        (not-empty (:job-name qmap))
+                        (update-in [:where] conj
+                                   '[?job :job/name ?job-name]
+                                   '[(.contains ^String ?job-name ?job-name-condition)])
+                        (or (:since qmap) (:until qmap) (:exit-status qmap))
+                        (update-in [:where] conj
+                                   '[?job :job/executions ?job-executions]
+                                   '[?job-execution :job-execution/create-time ?create-time]
+                                   '[(max ?create-time)]
+                                   '[?job-executions :job-execution/exit-status ?exit-status]
+                                   '[?job-executions :job-execution/end-time ?end-time])
+
+                        (:since qmap)
+                        (update-in [:where] conj
+                                   '[(>= ?end-time ?since-condition)])
+
+                        (:until qmap)
+                        (update-in [:where] conj
+                                   '[(<= ?end-time ?until-condition)])
+
+                        (:exit-status qmap)
+                        (update-in [:where] conj
+                                   '[(.contains ^String ?exit-status ?exit-status-condition)]))
+                      app-name
+                      (:job-name qmap [])
+                      (:since qmap "")
+                      (:until qmap "")
+                      (:exit-status qmap ""))]
+
     {:results (->> jobs
                    (drop (dec (or offset 0)))
                    (take (or limit 20))
@@ -212,7 +268,7 @@
 
 (defn list-resource [{:keys [datomic scheduler] :as jobs} app-name]
   (liberator/resource
-   :available-media-types ["application/edn"]
+   :available-media-types ["application/edn" "application/json"]
    :allowed-methods [:get :post]
    :malformed? (fn [ctx]
                  (validate (parse-body ctx)
@@ -268,12 +324,13 @@
                                                                                                              :status-notification/exit-status
                                                                                                              :status-notification/type] (:db/id sn))))
                                                                                             vec)}))))))
-                                   vec))))))
+                                   vec))))
+    :etag (str (int (/ (System/currentTimeMillis) 10000)))))
 
 
 (defn entry-resource [{:keys [datomic scheduler] :as jobs} app-name job-name]
   (liberator/resource
-   :available-media-types ["application/edn"]
+   :available-media-types ["application/edn" "application/json"]
    :allowed-methods [:get :put :delete]
    :malformed? #(parse-body %)
    :exists? (when-let [[app-id job-id] (find-by-name jobs app-name job-name)]
@@ -325,7 +382,7 @@
 
 (defn job-settings-resource [{:keys [datomic] :as jobs} app-name job-name & [cmd]]
   (liberator/resource
-   :available-media-types ["application/edn"]
+   :available-media-types ["application/edn" "application/json"]
   :allowed-methods [:get :delete :put]
   :malformed? #(parse-body %)
   :exists? (when-let [[app-id job-id] (find-by-name jobs app-name job-name)]
@@ -426,7 +483,7 @@
 
 (defn executions-resource [{:keys [datomic] :as jobs} app-name job-name]
   (liberator/resource
-   :available-media-types ["application/edn"]
+   :available-media-types ["application/edn" "application/json"]
    :allowed-methods [:get :post]
    :malformed? #(parse-body %)
    :exists? (when-let [[app-id job-id] (find-by-name jobs app-name job-name)]
@@ -460,7 +517,7 @@
 
 (defn execution-resource [{:keys [agents scheduler datomic] :as jobs} id & [cmd]]
   (liberator/resource
-   :available-media-types ["application/edn"]
+   :available-media-types ["application/edn" "application/json"]
    :allowed-methods [:get :put]
    :malformed? #(parse-body %)
    :exists? (fn [ctx]

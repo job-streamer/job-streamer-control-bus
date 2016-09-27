@@ -23,7 +23,6 @@
              [api :refer [api-endpoint]])
             [job-streamer.control-bus.endpoint.api :refer [api-endpoint]]))
 
-
 (defn wrap-same-origin-policy [handler alias]
   (fn [req]
     (if (= (:request-method req) :options)
@@ -39,6 +38,7 @@
   {:app {:middleware [[wrap-not-found :not-found]
                       [wrap-same-origin-policy :same-origin]
                       [wrap-defaults :defaults]]
+
          :not-found  "Resource Not Found"
          :defaults  (meta-merge api-defaults {})}})
 

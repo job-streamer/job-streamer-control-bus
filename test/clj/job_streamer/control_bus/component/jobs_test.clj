@@ -10,7 +10,8 @@
             [meta-merge.core :refer [meta-merge]]
             [clojure.test :refer :all]
             [clojure.pprint :refer :all]
-            [clojure.edn :as edn]))
+            [clojure.edn :as edn]
+            [clj-time.format :as f]))
 
 
 
@@ -71,3 +72,29 @@
         (is (= 201 (-> (handler request) :status))))
       (let [res (jobs/find-all (:jobs system) "default" nil)]
         (is (= 1 (:hits res)))))))
+
+(deftest parse-query
+  (testing "parse-query"
+    (let [result (jobs/parse-query "a b since:2016-09-01 until:2016-09-02 exit-status:COMPLETED")]
+      (is (= "a" (first (:job-name result))))
+      (is (= "2016-09-01" (f/unparse (:date f/formatters) (:since result))))
+      (is (= "2016-09-02" (f/unparse (:date f/formatters) (:until result))))
+      (is (=  "COMPLETED" (:exit-status result)))))
+  (testing "nil query returns nil"
+    (let [result (jobs/parse-query nil)]
+      (is (nil? result))))
+  (testing "empty query returns nil"
+    (let [result (jobs/parse-query "")]
+      (is (nil? result))))
+
+  (testing "single simple query"
+    (let [result (jobs/parse-query "a")]
+      (is (= {:job-name '("a")} result))))
+
+  (testing "single simple query"
+    (let [result (jobs/parse-query "a")]
+      (is (= {:job-name '("a")} result))))
+
+  (testing "ignore breaking tokens in a query"
+    (let [result (jobs/parse-query "a since: until: since:xxx until:yyy")]
+      (is (= {:job-name '("a")} result)))))
