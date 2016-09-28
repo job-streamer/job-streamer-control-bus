@@ -20,7 +20,7 @@ public class JobStreamerExecuteJob implements Job {
         JobDataMap data = context.getMergedJobDataMap();
         String jobName = data.getString("job-name");
         String host = data.getString("host");
-        int port = data.getInt("port");
+        long port = data.getLong("port");
         String appName = data.getString("app-name");
 
         URLConnection conn;
