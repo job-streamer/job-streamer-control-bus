@@ -78,10 +78,14 @@
       {:since (some->> since (f/parse (:date f/formatters)) .toDate)})))
 
 (defn- parse-query-until [q]
-  (let [until (.substring q (count "until:"))]
+  (let [until (.substring q (count "until:"))
+        parse-date-fn (partial f/parse (:date f/formatters))]
     (when (b/valid? {:until until}
                     :until [[v/datetime (:date f/formatters)]])
-      {:until (some->> until (f/parse (:date f/formatters)) .toDate)})))
+      {:until (some-> until
+                      parse-date-fn
+                      (.plusDays 1)
+                      .toDate)})))
 
 (defn- parse-query-exit-status [q]
   (let [exit-status (.substring q (count "exit-status:"))]
@@ -125,7 +129,7 @@
 
                         (:until qmap)
                         (update-in [:where] conj
-                                   '[(<= ?end-time ?until-condition)])
+                                   '[(< ?end-time ?until-condition)])
 
                         (:exit-status qmap)
                         (update-in [:where] conj
