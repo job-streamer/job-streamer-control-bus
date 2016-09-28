@@ -75,13 +75,17 @@
   (let [since (.substring q (count "since:"))]
     (when (b/valid? {:since since}
                     :since [[v/datetime (:date f/formatters)]])
-      {:since (f/parse (:date f/formatters) since)})))
+      {:since (some->> since (f/parse (:date f/formatters)) .toDate)})))
 
 (defn- parse-query-until [q]
-  (let [until (.substring q (count "until:"))]
+  (let [until (.substring q (count "until:"))
+        parse-date-fn (partial f/parse (:date f/formatters))]
     (when (b/valid? {:until until}
                     :until [[v/datetime (:date f/formatters)]])
-      {:until (f/parse (:date f/formatters) until)})))
+      {:until (some-> until
+                      parse-date-fn
+                      (.plusDays 1)
+                      .toDate)})))
 
 (defn- parse-query-exit-status [q]
   (let [exit-status (.substring q (count "exit-status:"))]
@@ -125,17 +129,17 @@
 
                         (:until qmap)
                         (update-in [:where] conj
-                                   '[(<= ?end-time ?until-condition)])
+                                   '[(< ?end-time ?until-condition)])
 
                         (:exit-status qmap)
                         (update-in [:where] conj
                                    '[(.contains ^String ?exit-status ?exit-status-condition)]))
                       app-name
-                      (:job-name qmap [])
+                      ;if argument is nil or empty vector datomic occurs error
+                      (or (not-empty (:job-name qmap)) [""])
                       (:since qmap "")
                       (:until qmap "")
                       (:exit-status qmap ""))]
-
     {:results (->> jobs
                    (drop (dec (or offset 0)))
                    (take (or limit 20))
