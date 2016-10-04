@@ -88,10 +88,25 @@
                       .toDate)})))
 
 (defn- parse-query-exit-status [q]
-  (let [exit-status (.substring q (count "exit-status:"))]
+  (let [exit-status (some-> q (.substring (count "exit-status:")) .toUpperCase)]
     (when (b/valid? {:exit-status exit-status}
                     :exit-status v/required)
       {:exit-status exit-status})))
+
+(defn- parse-query-batch-status [q]
+  (let [batch-status (some-> q (.substring (count "batch-status:")) .toLowerCase)]
+    (when (b/valid? {:batch-status batch-status}
+                    :batch-status [[v/member #{
+                                               "abandoned"
+                                               "completed"
+                                               "failed"
+                                               "started"
+                                               "statting"
+                                               "stopped"
+                                               "stopping"
+                                               "unknown"
+                                               "undispatched"}]])
+      {:batch-status (keyword "batch-status" batch-status)})))
 
 (defn parse-query [query]
   (when (not-empty query)
@@ -100,13 +115,14 @@
                  (.startsWith % "since:") (parse-query-since %)
                  (.startsWith % "until:") (parse-query-until %)
                  (.startsWith % "exit-status:") (parse-query-exit-status %)
+                 (.startsWith % "batch-status:") (parse-query-batch-status %)
                  :default {:job-name [%]}))
          (apply merge-with concat {:job-name nil}))))
 
 (defn find-all [{:keys [datomic]} app-name query & [offset limit]]
   (let [qmap (parse-query query)
         base-query '{:find [?job]
-                     :in [$ ?app-name [?job-name-condition ...] ?since-condition ?until-condition ?exit-status-condition]
+                     :in [$ ?app-name [?job-name-condition ...] ?since-condition ?until-condition ?exit-status-condition ?batch-status-condition]
                      :where [[?app :application/name ?app-name]
                              [?app :application/jobs ?job]]}
         jobs (d/query datomic
@@ -115,12 +131,13 @@
                         (update-in [:where] conj
                                    '[?job :job/name ?job-name]
                                    '[(.contains ^String ?job-name ?job-name-condition)])
-                        (or (:since qmap) (:until qmap) (:exit-status qmap))
+                        (or (:since qmap) (:until qmap) (:exit-status qmap) (:batch-status qmap))
                         (update-in [:where] conj
                                    '[?job :job/executions ?job-executions]
                                    '[?job-execution :job-execution/create-time ?create-time]
                                    '[(max ?create-time)]
                                    '[?job-executions :job-execution/exit-status ?exit-status]
+                                   '[?job-executions :job-execution/batch-status ?batch-status]
                                    '[?job-executions :job-execution/end-time ?end-time])
 
                         (:since qmap)
@@ -133,13 +150,17 @@
 
                         (:exit-status qmap)
                         (update-in [:where] conj
-                                   '[(.contains ^String ?exit-status ?exit-status-condition)]))
+                                   '[(.contains ^String ?exit-status ?exit-status-condition)])
+                        (:batch-status qmap)
+                        (update-in [:where] conj
+                                   '[(= ?batch-status ?batch-status-condition)]))
                       app-name
                       ;if argument is nil or empty vector datomic occurs error
                       (or (not-empty (:job-name qmap)) [""])
                       (:since qmap "")
                       (:until qmap "")
-                      (:exit-status qmap ""))]
+                      (:exit-status qmap "")
+                      (:batch-status qmap ""))]
     {:results (->> jobs
                    (drop (dec (or offset 0)))
                    (take (or limit 20))

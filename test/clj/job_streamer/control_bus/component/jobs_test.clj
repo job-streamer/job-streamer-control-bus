@@ -137,10 +137,14 @@
 
 (deftest parse-query
   (testing "parse-query"
-    (let [result (jobs/parse-query "a b since:2016-09-01 until:2016-09-02 exit-status:COMPLETED")]
+    (let [result (jobs/parse-query "a b since:2016-09-01 until:2016-09-02 exit-status:COMPLETED batch-status:failed")]
       (is (= "a" (first (:job-name result))))
       (is (= "2016-09-01" (some->> result :since (new DateTime) (f/unparse (:date f/formatters)))))
       (is (= "2016-09-03" (some->> result :until (new DateTime) (f/unparse (:date f/formatters)))))
+      (is (=  "COMPLETED" (:exit-status result)))
+      (is (= :batch-status/failed (:batch-status result)))))
+  (testing "exit-status is lowwer case"
+    (let [result (jobs/parse-query "exit-status:completed")]
       (is (=  "COMPLETED" (:exit-status result)))))
   (testing "nil query returns nil"
     (let [result (jobs/parse-query nil)]
