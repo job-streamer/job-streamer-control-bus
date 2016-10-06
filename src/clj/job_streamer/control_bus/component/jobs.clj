@@ -97,6 +97,7 @@
   (let [batch-status (some-> q (.substring (count "batch-status:")) .toLowerCase)]
     (when (b/valid? {:batch-status batch-status}
                     :batch-status [[v/member #{
+                                              ;jsr352
                                                "abandoned"
                                                "completed"
                                                "failed"
@@ -104,8 +105,13 @@
                                                "statting"
                                                "stopped"
                                                "stopping"
+                                              ;spring batch original
                                                "unknown"
-                                               "undispatched"}]])
+                                              ;job-streamer original
+                                               "registered"
+                                               "unrestarted"
+                                               "undispatched"
+                                               "queued"}]])
       {:batch-status (keyword "batch-status" batch-status)})))
 
 (defn parse-query [query]
@@ -134,15 +140,14 @@
                         (or (:since qmap) (:until qmap) (:exit-status qmap) (:batch-status qmap))
                         (update-in [:where] conj
                                    '[?job :job/executions ?job-executions]
-                                   '[?job-execution :job-execution/create-time ?create-time]
+                                   '[?job-executions :job-execution/create-time ?create-time]
                                    '[(max ?create-time)]
                                    '[?job-executions :job-execution/exit-status ?exit-status]
-                                   '[?job-executions :job-execution/batch-status ?batch-status]
                                    '[?job-executions :job-execution/end-time ?end-time])
 
                         (:since qmap)
                         (update-in [:where] conj
-                                   '[(>= ?end-time ?since-condition)])
+                                   '[(>= ?start-time ?since-condition)])
 
                         (:until qmap)
                         (update-in [:where] conj
@@ -153,7 +158,7 @@
                                    '[(.contains ^String ?exit-status ?exit-status-condition)])
                         (:batch-status qmap)
                         (update-in [:where] conj
-                                   '[(= ?batch-status ?batch-status-condition)]))
+                                   '[?job-executions :job-execution/batch-status  ?batch-status-condition]))
                       app-name
                       ;if argument is nil or empty vector datomic occurs error
                       (or (not-empty (:job-name qmap)) [""])
