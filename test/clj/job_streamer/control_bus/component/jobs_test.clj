@@ -47,8 +47,10 @@
     (handler request)))
 
 (defn setup-execution [{:keys [datomic] :as jobs}
-                       {:keys [db/id job-execution/end-time job-execution/create-time]
-                        :or {job-execution/end-time (java.util.Date.)
+                       {:keys [job-execution/start-time db/id job-execution/end-time job-execution/create-time]
+                        :or {
+                             job-execution/start-time (java.util.Date.)
+                             job-execution/end-time (java.util.Date.)
                              job-execution/create-time (java.util.Date.)}}]
   (let [execution-id (d/tempid :db.part/user)]
     (-> (d/transact
@@ -57,6 +59,7 @@
            :job-execution/batch-status :batch-status/undispatched
            :job-execution/create-time create-time
            :job-execution/end-time end-time
+           :job-execution/start-time start-time
            :job-execution/exit-status "COMPLETE"
            :job-execution/job-parameters "{}"}
           [:db/add id :job/executions execution-id]])
