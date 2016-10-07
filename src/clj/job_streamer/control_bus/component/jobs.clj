@@ -143,7 +143,8 @@
                                    '[?job-executions :job-execution/create-time ?create-time]
                                    '[(max ?create-time)]
                                    '[?job-executions :job-execution/exit-status ?exit-status]
-                                   '[?job-executions :job-execution/end-time ?end-time])
+                                   '[?job-executions :job-execution/end-time ?end-time]
+                                   '[?job-executions :job-execution/start-time ?start-time])
 
                         (:since qmap)
                         (update-in [:where] conj

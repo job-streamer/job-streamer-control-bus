@@ -115,25 +115,27 @@
         (is (= "job2" (get-in res [:results 0 :job/name])))))
 
     (let [job-id (get-in (jobs/find-all (:jobs system) "default" "job1") [:results 0 :db/id])
-          end-time (.toDate (f/parse (:date f/formatters) "2016-09-09"))]
+          create-time (.toDate (f/parse (:date f/formatters) "2016-09-01"))
+          start-time (.toDate (f/parse (:date f/formatters) "2016-09-09"))
+          end-time (.toDate (f/parse (:date f/formatters) "2016-09-10"))]
       (setup-execution (:jobs system)
-                       {:db/id job-id :job-execution/end-time end-time})
+                       {:db/id job-id
+                        :job-execution/end-time end-time
+                        :job-execution/start-time start-time
+                        :job-execution/create-time create-time})
       (testing "since"
-        (let [res (jobs/find-all (:jobs system) "default" "since:2016-09-09")]
+        (let [res (jobs/find-all (:jobs system) "default" "since:2016-09-07")]
           (pprint res)
           (is (= 1 (:hits res)))
           (is (= "job1" (get-in res [:results 0 :job/name])))))
       (testing "until"
-        (let [res (jobs/find-all (:jobs system) "default" "until:2016-09-09")]
+        (let [res (jobs/find-all (:jobs system) "default" "until:2016-09-11")]
           (is (= 1 (:hits res)))
           (is (= "job1" (get-in res [:results 0 :job/name])))))
       (testing "range"
-        (let [res (jobs/find-all (:jobs system) "default" "since:2016-09-09 until:2016-09-09")]
+        (let [res (jobs/find-all (:jobs system) "default" "since:2016-09-09 until:2016-09-10")]
           (is (= 1 (:hits res)))
-          (is (= "job1" (get-in res [:results 0 :job/name])))))
-
-
-      )))
+          (is (= "job1" (get-in res [:results 0 :job/name]))))))))
 
 (deftest parse-query
   (testing "parse-query"
