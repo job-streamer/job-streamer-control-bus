@@ -60,7 +60,7 @@
            :job-execution/create-time create-time
            :job-execution/end-time end-time
            :job-execution/start-time start-time
-           :job-execution/exit-status "COMPLETE"
+           :job-execution/exit-status "COMPLETED"
            :job-execution/job-parameters "{}"}
           [:db/add id :job/executions execution-id]])
         :tempids)))
@@ -127,16 +127,24 @@
                         :job-execution/start-time start-time
                         :job-execution/create-time create-time})
       (testing "since"
-        (let [res (jobs/find-all (:jobs system) "default" "since:2016-09-07")]
+        (let [res (jobs/find-all (:jobs system) "default" "since:2016-09-09")]
           (pprint res)
           (is (= 1 (:hits res)))
           (is (= "job1" (get-in res [:results 0 :job/name])))))
       (testing "until"
-        (let [res (jobs/find-all (:jobs system) "default" "until:2016-09-11")]
+        (let [res (jobs/find-all (:jobs system) "default" "until:2016-09-10")]
           (is (= 1 (:hits res)))
           (is (= "job1" (get-in res [:results 0 :job/name])))))
       (testing "range"
         (let [res (jobs/find-all (:jobs system) "default" "since:2016-09-09 until:2016-09-10")]
+          (is (= 1 (:hits res)))
+          (is (= "job1" (get-in res [:results 0 :job/name])))))
+      (testing "exit-status"
+        (let [res (jobs/find-all (:jobs system) "default" "exit-status:COMPLETED")]
+          (is (= 1 (:hits res)))
+          (is (= "job1" (get-in res [:results 0 :job/name])))))
+      (testing "batch-status"
+        (let [res (jobs/find-all (:jobs system) "default" "batch-status:undispatched")]
           (is (= 1 (:hits res)))
           (is (= "job1" (get-in res [:results 0 :job/name]))))))))
 
