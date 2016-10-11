@@ -7,13 +7,18 @@
             [liberator.core :as liberator]
             [clojure.string :as str]
             [clj-time.format :as f]
+            [liberator.representation :refer [ring-response]]
+            [ring.util.response :refer [response content-type header]]
             (job-streamer.control-bus [notification :as notification]
                                       [validation :refer [validate]]
                                       [util :refer [parse-body edn->datoms to-int]])
             (job-streamer.control-bus.component [datomic :as d]
                                                 [agents  :as ag]
                                                 [scheduler :as scheduler]))
-  (:import [java.util Date]))
+  (:import [java.util Date]
+           [java.nio.file Files]
+           [java.nio.file.attribute FileAttribute])
+  (:use [clojure.java.io]))
 
 (defn find-latest-execution
   "Find latest from given executions."
@@ -316,8 +321,7 @@
                           (conj datoms
                                 [:db/add [:application/name app-name] :application/jobs job-id]))
               job))
-
-   :handle-ok (fn [{{{query :q with-param :with :keys [limit offset]} :params} :request}]
+   :handle-ok (fn [{{{query :q with-param :with download :download :keys [limit offset]} :params} :request}]
                 (let [js (find-all jobs app-name query
                                    (to-int offset 0)
                                    (to-int limit 20))
@@ -326,7 +330,7 @@
                                         #"\s*,\s*")
                                        (map keyword)
                                        set)]
-                  (update-in js [:results]
+                  (let [result (update-in js [:results]
                              #(->> %
                                    (map (fn [{job-name :job/name
                                               executions :job/executions
@@ -355,7 +359,13 @@
                                                                                                              :status-notification/exit-status
                                                                                                              :status-notification/type] (:db/id sn))))
                                                                                             vec)}))))))
-                                   vec))))
+                                   vec))]
+                    (if (= download "true")
+                          (-> (response (pr-str (:results result)))
+                              (content-type "application/force-download")
+                              (header "Content-disposition" "attachment; filename=\"jobs.edn\"")
+                              (ring-response))
+                      result))))
     :etag (str (int (/ (System/currentTimeMillis) 10000)))))
 
 
