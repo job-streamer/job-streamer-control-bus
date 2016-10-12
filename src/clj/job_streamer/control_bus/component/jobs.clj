@@ -102,7 +102,7 @@
                                                "completed"
                                                "failed"
                                                "started"
-                                               "statting"
+                                               "starting"
                                                "stopped"
                                                "stopping"
                                               ;spring batch original
