@@ -104,10 +104,40 @@
    :handle-ok (fn [ctx]
                 (vals @applications))))
 
-(defn batch-components-resource [{:keys [datomic]} app-name]
+(defn batch-components-resource [{:keys [datomic applications]} app-name]
   (liberator/resource
    :available-media-types ["application/edn" "application/json"]
-   :allowed-methods [:get]
+   :allowed-methods [:get :post]
+   :post! (fn [ctx]
+            (let [{:keys [filename tempfile] :as file} (get-in ctx [:request :params "file"])
+                  jar-file (io/file "batch-components" app-name filename)
+                  classpaths [(.toString (io/as-url jar-file))]
+                  description "Uploaded by console."]
+              (io/copy tempfile jar-file)
+              (if-let [app-id (d/query datomic
+                                     '[:find ?e .
+                                       :in $ ?n
+                                       :where [?e :application/name ?n]]
+                                     app-name)]
+                (d/transact datomic
+                            [{:db/id app-id
+                              :application/description description
+                              :application/classpaths classpaths}])
+                (d/transact datomic
+                            [{:db/id #db/id[db.part/user -1]
+                              :application/name app-name
+                              :application/description description
+                              :application/classpaths classpaths}]))
+              (register-app applications {:application/name app-name
+                                          :application/classpaths classpaths
+                                          :application/description description})
+              (when-let [components (scan-components classpaths)]
+                (let [batch-component-id (find-batch-component datomic app-name)]
+                  (d/transact datomic
+                              [(merge {:db/id (or batch-component-id
+                                                  (d/tempid :db.part/user))
+                                       :batch-component/application [:application/name app-name]}
+                                      components)])))))
    :handle-ok (fn [ctx]
                 (let [in-app (->> (d/query datomic
                                            '{:find [?c .]
