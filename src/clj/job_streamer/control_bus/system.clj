@@ -31,7 +31,7 @@
       {:status 200
        :headers {"Access-Control-Allow-Methods" "POST,GET,PUT,DELETE,OPTIONS"
                  "Access-Control-Allow-Origin" "*"
-                 "Access-Control-Allow-Headers" "Content-Type,Cache-Control,X-Requested-With"}}
+                 "Access-Control-Allow-Headers" "Content-Type"}}
       (when-let [resp (handler req)]
         (header resp "Access-Control-Allow-Origin" "*")))))
 
