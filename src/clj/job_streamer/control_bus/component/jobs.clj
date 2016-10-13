@@ -301,7 +301,33 @@
                      :job-execution/batch-status {:db/ident :batch-status/registered}}) schedules)))
     executions))
 
-(defn- find-all-convert-into-retval-format [jobs app-name query offset limit with-param scheduler datomic]
+(defn- parse-sort-order-component [query]
+  (let [split (str/split query #":")
+        name (first split)
+        sort-order (some-> split second .toLowerCase)]
+    (when (and
+            (b/valid? {:sort-order sort-order}
+                      :sort-order [[v/member #{
+                                                "asc"
+                                                "desc"}]])
+            (b/valid? {:name name}
+                      :name [[v/member #{
+                                          "name"
+                                          "last-execution-started"
+                                          "last-execution-duration"
+                                          "last-execution-status"
+                                          "next-execution-start"
+                                          }]]))
+      {(keyword name) (keyword sort-order)})))
+
+(defn parse-sort-order [query]
+  (when (not-empty query)
+    (->> (str/split query #",")
+         (map #(parse-sort-order-component %))
+         (apply merge))))
+
+
+(defn- find-all-convert-into-retval-format [jobs app-name query sort-order offset limit with-param scheduler datomic]
    (let [js (find-all jobs app-name query
                                    (to-int offset 0)
                                    (to-int limit 20))
@@ -309,7 +335,8 @@
                                         (or (not-empty with-param) "execution")
                                         #"\s*,\s*")
                                        (map keyword)
-                                       set)]
+                                       set)
+         sort-order-map (parse-sort-order sort-order)]
                   (update-in js [:results]
                              #(->> %
                                    (map (fn [{job-name :job/name
@@ -360,16 +387,16 @@
                           (conj datoms
                                 [:db/add [:application/name app-name] :application/jobs job-id]))
               job))
-   :handle-ok (fn [{{{query :q with-param :with download :download :keys [limit offset]} :params} :request}]
-                (find-all-convert-into-retval-format jobs app-name query offset limit with-param scheduler datomic))
+   :handle-ok (fn [{{{query :q with-param :with sort-order :sort-by :keys [limit offset]} :params} :request}]
+                (find-all-convert-into-retval-format jobs app-name query sort-order offset limit with-param scheduler datomic))
     :etag (str (int (/ (System/currentTimeMillis) 10000)))))
 
 (defn download-list-resource [{:keys [datomic scheduler] :as jobs} app-name]
   (liberator/resource
    :available-media-types ["application/edn" "application/json"]
    :allowed-methods [:get]
-   :handle-ok (fn [{{{query :q with-param :with :keys [limit offset]} :params} :request}]
-                          (-> (response (pr-str (:results (find-all-convert-into-retval-format jobs app-name query offset limit with-param scheduler datomic))))
+   :handle-ok (fn [{{{query :q with-param :with sort-order :sort-by :keys [limit offset]} :params} :request}]
+                          (-> (response (pr-str (:results (find-all-convert-into-retval-format jobs app-name query sort-order offset limit with-param scheduler datomic))))
                               (content-type "application/force-download")
                               (header "Content-disposition" "attachment; filename=\"jobs.edn\"")
                               (ring-response)))))

@@ -107,6 +107,8 @@
         (is (= 201 (-> ((-> (jobs/list-resource (:jobs system) "default")) request) :status))))
       (let [request {:request-method :get}
             response (handler request)]
+        (println "#####")
+        (println response)
         (is (= "job1" (-> response :body read-string first :job/name)))
         (is (= "application/force-download"  ((:headers response) "Content-Type")))
         (is (= "attachment; filename=\"jobs.edn\""  ((:headers response) "Content-disposition")))))))
@@ -146,7 +148,63 @@
                         :job-execution/create-time create-time})
       (testing "since"
         (let [res (jobs/find-all (:jobs system) "default" "since:2016-09-09")]
-          (pprint res)
+          (is (= 1 (:hits res)))
+          (is (= "job1" (get-in res [:results 0 :job/name])))))
+      (testing "until"
+        (let [res (jobs/find-all (:jobs system) "default" "until:2016-09-10")]
+          (is (= 1 (:hits res)))
+          (is (= "job1" (get-in res [:results 0 :job/name])))))
+      (testing "range"
+        (let [res (jobs/find-all (:jobs system) "default" "since:2016-09-09 until:2016-09-10")]
+          (is (= 1 (:hits res)))
+          (is (= "job1" (get-in res [:results 0 :job/name])))))
+      (testing "exit-status"
+        (let [res (jobs/find-all (:jobs system) "default" "exit-status:COMPLETED")]
+          (is (= 1 (:hits res)))
+          (is (= "job1" (get-in res [:results 0 :job/name])))))
+      (testing "batch-status"
+        (let [res (jobs/find-all (:jobs system) "default" "batch-status:undispatched")]
+          (is (= 1 (:hits res)))
+          (is (= "job1" (get-in res [:results 0 :job/name]))))))))
+
+(deftest find-all-with-sort
+  (let [system (new-system config)
+        handler (-> (jobs/list-resource (:jobs system) "default"))]
+    (create-app system)
+    ;; setup data
+    (handler {:request-method :post
+              :content-type "application/edn"
+              :body (pr-str {:job/name "job1"})})
+    (handler {:request-method :post
+              :content-type "application/edn"
+              :body (pr-str {:job/name "job2"})})
+    (handler {:request-method :post
+              :content-type "application/edn"
+              :body (pr-str {:job/name "job3"})})
+    (testing "Mathes exactly"
+      (let [res (jobs/find-all (:jobs system) "default" "job1")]
+        (is (= 1 (:hits res)))))
+
+    (testing "A query of multiple keywords"
+      (let [res (jobs/find-all (:jobs system) "default" "job1 job2")]
+        (is (= 2 (:hits res)))))
+
+    (testing "backward matching"
+      (let [res (jobs/find-all (:jobs system) "default" "b2")]
+        (is (= 1 (:hits res)))
+        (is (= "job2" (get-in res [:results 0 :job/name])))))
+
+    (let [job-id (get-in (jobs/find-all (:jobs system) "default" "job1") [:results 0 :db/id])
+          create-time (.toDate (f/parse (:date f/formatters) "2016-09-01"))
+          start-time (.toDate (f/parse (:date f/formatters) "2016-09-09"))
+          end-time (.toDate (f/parse (:date f/formatters) "2016-09-10"))]
+      (setup-execution (:jobs system)
+                       {:db/id job-id
+                        :job-execution/end-time end-time
+                        :job-execution/start-time start-time
+                        :job-execution/create-time create-time})
+      (testing "since"
+        (let [res (jobs/find-all (:jobs system) "default" "since:2016-09-09")]
           (is (= 1 (:hits res)))
           (is (= "job1" (get-in res [:results 0 :job/name])))))
       (testing "until"
@@ -191,3 +249,19 @@
   (testing "ignore breaking tokens in a query"
     (let [result (jobs/parse-query "a since: until: since:xxx until:yyy")]
       (is (= {:job-name '("a")} result)))))
+
+(deftest parse-sort-order
+  (testing "parse-query-nomal"
+    (let [result (jobs/parse-sort-order "name:asc,last-execution-status:desc")]
+      (is (= :asc (:name result)))
+      (is (= :desc (:last-execution-status result)))))
+  (testing "parse-query-invalid-name"
+    (let [result (jobs/parse-sort-order "name:asc,last-execution-status:desc,something:asc")]
+      (is (= :asc (:name result)))
+      (is (= :desc (:last-execution-status result)))
+      (is (not= :asc (:something result)))))
+  (testing "parse-query-invalid-sort-order"
+    (let [result (jobs/parse-sort-order "name:asc,last-execution-status:desc,next-execution-start:random")]
+      (is (= :asc (:name result)))
+      (is (= :desc (:last-execution-status result)))
+      (is (not= :random (:next-execution-start result))))))
