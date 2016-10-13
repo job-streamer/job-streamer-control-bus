@@ -368,7 +368,7 @@
   (liberator/resource
    :available-media-types ["application/edn" "application/json"]
    :allowed-methods [:get]
-   :handle-ok (fn [{{{query :q with-param :with download :download :keys [limit offset]} :params} :request}]
+   :handle-ok (fn [{{{query :q with-param :with :keys [limit offset]} :params} :request}]
                           (-> (response (pr-str (:results (find-all-convert-into-retval-format jobs app-name query offset limit with-param scheduler datomic))))
                               (content-type "application/force-download")
                               (header "Content-disposition" "attachment; filename=\"jobs.edn\"")
