@@ -1,6 +1,7 @@
 (ns job-streamer.control-bus.component.apps
   (:require [clojure.tools.logging :as log]
             [clojure.java.io :as io]
+            [clojure.string :refer [ends-with?]]
             [com.stuartsierra.component :as component]
             [liberator.core :as liberator]
             [bouncer.validators :as v]
@@ -108,11 +109,18 @@
   (liberator/resource
    :available-media-types ["application/edn" "application/json"]
    :allowed-methods [:get :post]
+   :malformed? #(let [{:keys [request-method params]} (:request %)]
+                  ;; Check file extension when posted.
+                  (and (= request-method :post)
+                       (some-> params
+                               (get-in ["file" :filename])
+                               (ends-with? ".jar")
+                               not)))
    :post! (fn [ctx]
-            (let [{:keys [filename tempfile] :as file} (get-in ctx [:request :params "file"])
+            (let [{:keys [filename tempfile]} (get-in ctx [:request :params "file"])
                   jar-file (io/file "batch-components" app-name filename)
                   classpaths [(.toString (io/as-url jar-file))]
-                  description "Uploaded by console."]
+                  description "Uploaded by the console."]
               (io/copy tempfile jar-file)
               (if-let [app-id (d/query datomic
                                      '[:find ?e .
