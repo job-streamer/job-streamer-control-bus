@@ -49,7 +49,7 @@
                  {:configuration ([:source "1.7"] [:target "1.7"]) }]]
 
   :profiles
-  {:dev  [:project/dev  :profiles/dev]
+  {:dev  [:project/dev  :profiles/dev :project/test :profiles/test]
    :test [:project/test :profiles/test]
    :uberjar {:aot :all}
    :profiles/dev  {}
@@ -64,7 +64,8 @@
                    :source-paths ["dev"]
                    :repl-options {:init-ns user}
                    :env {:port "45102"}}
-   :project/test {:dependencies [[junit "4.12"]
+   :project/test {:resource-paths ["test/resources"]
+                  :dependencies [[junit "4.12"]
                                 [org.mockito/mockito-all "1.10.19"]
                                 [org.powermock/powermock-api-mockito "1.6.4"]
                                 [org.powermock/powermock-module-junit4 "1.6.4"]]}})
