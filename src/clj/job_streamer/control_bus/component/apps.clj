@@ -110,17 +110,18 @@
    :available-media-types ["application/edn" "application/json"]
    :allowed-methods [:get :post]
    :malformed? #(let [{:keys [request-method params]} (:request %)]
-                  ;; Check file extension when posted.
+                  ;; Check the extension of the posted file.
                   (and (= request-method :post)
                        (some-> params
                                (get-in ["file" :filename])
                                (ends-with? ".jar")
                                not)))
    :post! (fn [ctx]
-            (let [{:keys [filename tempfile]} (get-in ctx [:request :params "file"])
+            (let [{:keys [filename tempfile size]} (get-in ctx [:request :params "file"])
                   jar-file (io/file "batch-components" app-name filename)
                   classpaths [(.toString (io/as-url jar-file))]
                   description "Uploaded by the console."]
+              (log/infof "Jar file is being uploaded [%s, %d bytes]" filename size)
               (io/copy tempfile jar-file)
               (if-let [app-id (d/query datomic
                                      '[:find ?e .
