@@ -301,28 +301,8 @@
                      :job-execution/batch-status {:db/ident :batch-status/registered}}) schedules)))
     executions))
 
-
-(defn list-resource [{:keys [datomic scheduler] :as jobs} app-name]
-  (liberator/resource
-   :available-media-types ["application/edn" "application/json"]
-   :allowed-methods [:get :post]
-   :malformed? (fn [ctx]
-                 (validate (parse-body ctx)
-                           :job/name [v/required [v/matches #"^[\w\-]+$"]]))
-   :exists? (fn [{{job-name :job/name} :edn :as ctx}]
-              (if (#{:post} (get-in ctx [:request :request-method]))
-                (when-let [[_ job-id] (find-by-name jobs app-name job-name)]
-                  {:job-id job-id})
-                true))
-   :post! (fn [{job :edn job-id :job-id}]
-            (let [datoms (edn->datoms job job-id)
-                  job-id (:db/id (first datoms))]
-              (d/transact datomic
-                          (conj datoms
-                                [:db/add [:application/name app-name] :application/jobs job-id]))
-              job))
-   :handle-ok (fn [{{{query :q with-param :with download :download :keys [limit offset]} :params} :request}]
-                (let [js (find-all jobs app-name query
+(defn- find-all-convert-into-retval-format [jobs app-name query offset limit with-param scheduler datomic]
+   (let [js (find-all jobs app-name query
                                    (to-int offset 0)
                                    (to-int limit 20))
                       with-params (->> (clojure.string/split
@@ -330,7 +310,7 @@
                                         #"\s*,\s*")
                                        (map keyword)
                                        set)]
-                  (let [result (update-in js [:results]
+                  (update-in js [:results]
                              #(->> %
                                    (map (fn [{job-name :job/name
                                               executions :job/executions
@@ -359,14 +339,40 @@
                                                                                                              :status-notification/exit-status
                                                                                                              :status-notification/type] (:db/id sn))))
                                                                                             vec)}))))))
-                                   vec))]
-                    (if (= download "true")
-                          (-> (response (pr-str (:results result)))
+                                   vec))))
+
+(defn list-resource [{:keys [datomic scheduler] :as jobs} app-name]
+  (liberator/resource
+   :available-media-types ["application/edn" "application/json"]
+   :allowed-methods [:get :post]
+   :malformed? (fn [ctx]
+                 (validate (parse-body ctx)
+                           :job/name [v/required [v/matches #"^[\w\-]+$"]]))
+   :exists? (fn [{{job-name :job/name} :edn :as ctx}]
+              (if (#{:post} (get-in ctx [:request :request-method]))
+                (when-let [[_ job-id] (find-by-name jobs app-name job-name)]
+                  {:job-id job-id})
+                true))
+   :post! (fn [{job :edn job-id :job-id}]
+            (let [datoms (edn->datoms job job-id)
+                  job-id (:db/id (first datoms))]
+              (d/transact datomic
+                          (conj datoms
+                                [:db/add [:application/name app-name] :application/jobs job-id]))
+              job))
+   :handle-ok (fn [{{{query :q with-param :with download :download :keys [limit offset]} :params} :request}]
+                (find-all-convert-into-retval-format jobs app-name query offset limit with-param scheduler datomic))
+    :etag (str (int (/ (System/currentTimeMillis) 10000)))))
+
+(defn download-list-resource [{:keys [datomic scheduler] :as jobs} app-name]
+  (liberator/resource
+   :available-media-types ["application/edn" "application/json"]
+   :allowed-methods [:get]
+   :handle-ok (fn [{{{query :q with-param :with download :download :keys [limit offset]} :params} :request}]
+                          (-> (response (pr-str (:results (find-all-convert-into-retval-format jobs app-name query offset limit with-param scheduler datomic))))
                               (content-type "application/force-download")
                               (header "Content-disposition" "attachment; filename=\"jobs.edn\"")
-                              (ring-response))
-                      result))))
-    :etag (str (int (/ (System/currentTimeMillis) 10000)))))
+                              (ring-response)))))
 
 
 (defn entry-resource [{:keys [datomic scheduler] :as jobs} app-name job-name]

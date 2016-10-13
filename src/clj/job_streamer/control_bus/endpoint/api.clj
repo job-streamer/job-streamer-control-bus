@@ -21,6 +21,7 @@
 (defn api-endpoint [{:keys [jobs agents calendar scheduler apps]}]
   (routes
    (ANY "/:app-name/jobs" [app-name] (jobs/list-resource jobs app-name))
+   (ANY "/:app-name/jobs/download" [app-name] (jobs/download-list-resource jobs app-name))
    (ANY ["/:app-name/job/:job-name/settings/:cmd"
          :app-name #".*"
          :job-name #".*"
