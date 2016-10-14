@@ -268,19 +268,48 @@
         (is (= "job1" (get-in res [:results 0 :job/name])))
         ))
     (testing "multiple-query"
-      (let [res (jobs/find-all-convert-into-retval-format (:jobs system) "default" "" "0" "20"  "execution" "name:desc last-execution-status:asc")]
+      (let [res (jobs/find-all-convert-into-retval-format (:jobs system) "default" "" "0" "20"  "execution" "name:desc,last-execution-status:asc")]
         (is (= 3 (:hits res)))
         (is (= "job3" (get-in res [:results 0 :job/name])))
         (is (= "job2" (get-in res [:results 1 :job/name])))
         (is (= "job1" (get-in res [:results 2 :job/name])))
         )
-      (let [res (jobs/find-all-convert-into-retval-format (:jobs system) "default" "" "0" "20"  "execution" "last-execution-status:desc name:desc")]
+      (let [res (jobs/find-all-convert-into-retval-format (:jobs system) "default" "" "0" "20"  "execution" "last-execution-status:desc,name:desc")]
         (is (= 3 (:hits res)))
         (is (= "job3" (get-in res [:results 2 :job/name])))
         (is (= "job2" (get-in res [:results 1 :job/name])))
         (is (= "job1" (get-in res [:results 0 :job/name])))
         ))
-    ))
+    (handler {:request-method :post
+              :content-type "application/edn"
+              :body (pr-str {:job/name "job4"})})
+    (let [job-id (get-in (jobs/find-all (:jobs system) "default" "job4") [:results 0 :db/id])
+          create-time (.toDate (f/parse (:date f/formatters) "2016-09-01"))
+          start-time (.toDate (f/parse (:date f/formatters) "2016-09-8"))
+          end-time (.toDate (f/parse (:date f/formatters) "2016-09-10"))
+          batch-status :batch-status/completed]
+      (setup-execution (:jobs system)
+                       {:db/id job-id
+                        :job-execution/end-time end-time
+                        :job-execution/start-time start-time
+                        :job-execution/create-time create-time
+                        :job-execution/batch-status batch-status}))
+    (testing "multiple-query-sort-by-second-key"
+      (let [res (jobs/find-all-convert-into-retval-format (:jobs system) "default" "" "0" "20"  "execution" "last-execution-status:asc,name:asc")]
+        (is (= 4 (:hits res)))
+        (is (= "job3" (get-in res [:results 0 :job/name])))
+        (is (= "job4" (get-in res [:results 1 :job/name])))
+        (is (= "job2" (get-in res [:results 2 :job/name])))
+        (is (= "job1" (get-in res [:results 3 :job/name])))
+        )
+      (let [res (jobs/find-all-convert-into-retval-format (:jobs system) "default" "" "0" "20"  "execution" "last-execution-status:asc,name:desc")]
+        (is (= 4 (:hits res)))
+        (is (= "job4" (get-in res [:results 0 :job/name])))
+        (is (= "job3" (get-in res [:results 1 :job/name])))
+        (is (= "job2" (get-in res [:results 2 :job/name])))
+        (is (= "job1" (get-in res [:results 3 :job/name])))
+        ))))
+
 
 (deftest parse-query
   (testing "parse-query"
@@ -322,4 +351,17 @@
     (let [result (jobs/parse-sort-order "name:asc,last-execution-status:desc,next-execution-start:random")]
       (is (= :asc (:name result)))
       (is (= :desc (:last-execution-status result)))
-      (is (not= :random (:next-execution-start result))))))
+      (is (not= :random (:next-execution-start result)))))
+  (testing "parse-query-sort-order's-order"
+    (let [result (jobs/parse-sort-order "last-execution-status:desc,name:asc,next-execution-start:asc,last-execution-started:desc,last-execution-duration:asc")]
+      (println (seq result))
+      (is (= :last-execution-status (-> result first first)))
+      (is (= :desc (-> result first second)))
+      (is (= :name (-> result second first)))
+      (is (= :asc (-> result second second)))
+      (is (= :next-execution-start (-> result seq (nth 2) first)))
+      (is (= :asc (-> result seq (nth 2) second)))
+      (is (= :last-execution-started (-> result seq (nth 3) first)))
+      (is (= :desc (-> result seq (nth 3) second)))
+      (is (= :last-execution-duration (-> result seq (nth 4) first)))
+      (is (= :asc (-> result seq (nth 4) second))))))
