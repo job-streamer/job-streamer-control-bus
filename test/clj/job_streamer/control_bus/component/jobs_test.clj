@@ -47,16 +47,17 @@
     (handler request)))
 
 (defn setup-execution [{:keys [datomic] :as jobs}
-                       {:keys [job-execution/start-time db/id job-execution/end-time job-execution/create-time]
+                       {:keys [job-execution/start-time db/id job-execution/end-time job-execution/create-time job-execution/batch-status]
                         :or {
                              job-execution/start-time (java.util.Date.)
                              job-execution/end-time (java.util.Date.)
-                             job-execution/create-time (java.util.Date.)}}]
+                             job-execution/create-time (java.util.Date.)
+                             job-execution/batch-status :batch-status/undispatched}}]
   (let [execution-id (d/tempid :db.part/user)]
     (-> (d/transact
          datomic
          [{:db/id execution-id
-           :job-execution/batch-status :batch-status/undispatched
+           :job-execution/batch-status batch-status
            :job-execution/create-time create-time
            :job-execution/end-time end-time
            :job-execution/start-time start-time
@@ -107,8 +108,6 @@
         (is (= 201 (-> ((-> (jobs/list-resource (:jobs system) "default")) request) :status))))
       (let [request {:request-method :get}
             response (handler request)]
-        (println "#####")
-        (println response)
         (is (= "job1" (-> response :body read-string first :job/name)))
         (is (= "application/force-download"  ((:headers response) "Content-Type")))
         (is (= "attachment; filename=\"jobs.edn\""  ((:headers response) "Content-disposition")))))))
@@ -181,48 +180,107 @@
     (handler {:request-method :post
               :content-type "application/edn"
               :body (pr-str {:job/name "job3"})})
-    (testing "Mathes exactly"
-      (let [res (jobs/find-all (:jobs system) "default" "job1")]
-        (is (= 1 (:hits res)))))
-
-    (testing "A query of multiple keywords"
-      (let [res (jobs/find-all (:jobs system) "default" "job1 job2")]
-        (is (= 2 (:hits res)))))
-
-    (testing "backward matching"
-      (let [res (jobs/find-all (:jobs system) "default" "b2")]
-        (is (= 1 (:hits res)))
-        (is (= "job2" (get-in res [:results 0 :job/name])))))
+    (testing "sort-by-name"
+      (let [res (jobs/find-all-convert-into-retval-format (:jobs system) "default" "" "0" "20"  "notation,shcedule,setting" "name:asc")]
+        (is (= 3 (:hits res)))
+        (is (= "job1" (get-in res [:results 0 :job/name])))
+        (is (= "job2" (get-in res [:results 1 :job/name])))
+        (is (= "job3" (get-in res [:results 2 :job/name])))
+        )
+      (let [res (jobs/find-all-convert-into-retval-format (:jobs system) "default" "" "0" "20"  "notation,shcedule,setting" "name:desc")]
+        (is (= 3 (:hits res)))
+        (is (= "job1" (get-in res [:results 2 :job/name])))
+        (is (= "job2" (get-in res [:results 1 :job/name])))
+        (is (= "job3" (get-in res [:results 0 :job/name])))
+        ))
 
     (let [job-id (get-in (jobs/find-all (:jobs system) "default" "job1") [:results 0 :db/id])
           create-time (.toDate (f/parse (:date f/formatters) "2016-09-01"))
           start-time (.toDate (f/parse (:date f/formatters) "2016-09-09"))
-          end-time (.toDate (f/parse (:date f/formatters) "2016-09-10"))]
+          end-time (.toDate (f/parse (:date f/formatters) "2016-09-10"))
+          batch-status :batch-status/stopping]
       (setup-execution (:jobs system)
                        {:db/id job-id
                         :job-execution/end-time end-time
                         :job-execution/start-time start-time
-                        :job-execution/create-time create-time})
-      (testing "since"
-        (let [res (jobs/find-all (:jobs system) "default" "since:2016-09-09")]
-          (is (= 1 (:hits res)))
-          (is (= "job1" (get-in res [:results 0 :job/name])))))
-      (testing "until"
-        (let [res (jobs/find-all (:jobs system) "default" "until:2016-09-10")]
-          (is (= 1 (:hits res)))
-          (is (= "job1" (get-in res [:results 0 :job/name])))))
-      (testing "range"
-        (let [res (jobs/find-all (:jobs system) "default" "since:2016-09-09 until:2016-09-10")]
-          (is (= 1 (:hits res)))
-          (is (= "job1" (get-in res [:results 0 :job/name])))))
-      (testing "exit-status"
-        (let [res (jobs/find-all (:jobs system) "default" "exit-status:COMPLETED")]
-          (is (= 1 (:hits res)))
-          (is (= "job1" (get-in res [:results 0 :job/name])))))
-      (testing "batch-status"
-        (let [res (jobs/find-all (:jobs system) "default" "batch-status:undispatched")]
-          (is (= 1 (:hits res)))
-          (is (= "job1" (get-in res [:results 0 :job/name]))))))))
+                        :job-execution/create-time create-time
+                        :job-execution/batch-status batch-status}))
+    (let [job-id (get-in (jobs/find-all (:jobs system) "default" "job2") [:results 0 :db/id])
+          create-time (.toDate (f/parse (:date f/formatters) "2016-09-01"))
+          start-time (.toDate (f/parse (:date f/formatters) "2016-09-10"))
+          end-time (.toDate (f/parse (:date f/formatters) "2016-09-13"))
+          batch-status :batch-status/failed]
+
+      (setup-execution (:jobs system)
+                       {:db/id job-id
+                        :job-execution/end-time end-time
+                        :job-execution/start-time start-time
+                        :job-execution/create-time create-time
+                        :job-execution/batch-status batch-status}))
+    (let [job-id (get-in (jobs/find-all (:jobs system) "default" "job3") [:results 0 :db/id])
+          create-time (.toDate (f/parse (:date f/formatters) "2016-09-01"))
+          start-time (.toDate (f/parse (:date f/formatters) "2016-09-8"))
+          end-time (.toDate (f/parse (:date f/formatters) "2016-09-10"))
+          batch-status :batch-status/completed]
+      (setup-execution (:jobs system)
+                       {:db/id job-id
+                        :job-execution/end-time end-time
+                        :job-execution/start-time start-time
+                        :job-execution/create-time create-time
+                        :job-execution/batch-status batch-status}))
+    (testing "sort-by-last-execution-start"
+      (let [res (jobs/find-all-convert-into-retval-format (:jobs system) "default" "" "0" "20"  "execution" "last-execution-started:asc")]
+        (is (= 3 (:hits res)))
+        (is (= "job3" (get-in res [:results 0 :job/name])))
+        (is (= "job1" (get-in res [:results 1 :job/name])))
+        (is (= "job2" (get-in res [:results 2 :job/name])))
+        )
+      (let [res (jobs/find-all-convert-into-retval-format (:jobs system) "default" "" "0" "20"  "execution" "last-execution-started:desc")]
+        (is (= 3 (:hits res)))
+        (is (= "job3" (get-in res [:results 2 :job/name])))
+        (is (= "job1" (get-in res [:results 1 :job/name])))
+        (is (= "job2" (get-in res [:results 0 :job/name])))
+        ))
+    (testing "sort-by-last-execution-duration"
+      (let [res (jobs/find-all-convert-into-retval-format (:jobs system) "default" "" "0" "20"  "execution" "last-execution-duration:asc")]
+        (is (= 3 (:hits res)))
+        (is (= "job1" (get-in res [:results 0 :job/name])))
+        (is (= "job3" (get-in res [:results 1 :job/name])))
+        (is (= "job2" (get-in res [:results 2 :job/name])))
+        )
+      (let [res (jobs/find-all-convert-into-retval-format (:jobs system) "default" "" "0" "20"  "execution" "last-execution-duration:desc")]
+        (is (= 3 (:hits res)))
+        (is (= "job1" (get-in res [:results 2 :job/name])))
+        (is (= "job3" (get-in res [:results 1 :job/name])))
+        (is (= "job2" (get-in res [:results 0 :job/name])))
+        ))
+    (testing "sort-by-last-execution-status"
+      (let [res (jobs/find-all-convert-into-retval-format (:jobs system) "default" "" "0" "20"  "execution" "last-execution-status:asc")]
+        (is (= 3 (:hits res)))
+        (is (= "job3" (get-in res [:results 0 :job/name])))
+        (is (= "job2" (get-in res [:results 1 :job/name])))
+        (is (= "job1" (get-in res [:results 2 :job/name])))
+        )
+      (let [res (jobs/find-all-convert-into-retval-format (:jobs system) "default" "" "0" "20"  "execution" "last-execution-status:desc")]
+        (is (= 3 (:hits res)))
+        (is (= "job3" (get-in res [:results 2 :job/name])))
+        (is (= "job2" (get-in res [:results 1 :job/name])))
+        (is (= "job1" (get-in res [:results 0 :job/name])))
+        ))
+    (testing "multiple-query"
+      (let [res (jobs/find-all-convert-into-retval-format (:jobs system) "default" "" "0" "20"  "execution" "name:desc last-execution-status:asc")]
+        (is (= 3 (:hits res)))
+        (is (= "job3" (get-in res [:results 0 :job/name])))
+        (is (= "job2" (get-in res [:results 1 :job/name])))
+        (is (= "job1" (get-in res [:results 2 :job/name])))
+        )
+      (let [res (jobs/find-all-convert-into-retval-format (:jobs system) "default" "" "0" "20"  "execution" "last-execution-status:desc name:desc")]
+        (is (= 3 (:hits res)))
+        (is (= "job3" (get-in res [:results 2 :job/name])))
+        (is (= "job2" (get-in res [:results 1 :job/name])))
+        (is (= "job1" (get-in res [:results 0 :job/name])))
+        ))
+    ))
 
 (deftest parse-query
   (testing "parse-query"
