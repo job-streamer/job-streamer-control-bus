@@ -122,6 +122,7 @@
                   classpaths [(.toString (io/as-url jar-file))]
                   description "Uploaded by the console."]
               (log/infof "Jar file is being uploaded [%s, %d bytes]" filename size)
+              (io/make-parents jar-file)
               (io/copy tempfile jar-file)
               (if-let [app-id (d/query datomic
                                      '[:find ?e .
