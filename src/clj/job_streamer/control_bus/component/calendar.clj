@@ -2,7 +2,9 @@
   (:require [clojure.edn :as edn]
             [liberator.core :as liberator]
             [liberator.representation :refer [ring-response]]
+            [bouncer.core :as b]
             [bouncer.validators :as v]
+            [clojure.string :as str]
             [com.stuartsierra.component :as component]
             (job-streamer.control-bus [validation :refer (validate)]
                                       [util :refer [parse-body]])
@@ -17,6 +19,47 @@
                      [?schedule :schedule/calendar ?calendar]
                      [?calendar :calendar/name ?calendar-name]]}
            calendar-name))
+
+(defn- decide-sort-order [asc-or-desc v1 v2]
+  (if (= :asc asc-or-desc)
+    (compare v1 v2)
+    (compare v2 v1)))
+
+
+(defn- parse-sort-order-component [query]
+  (let [split (str/split query #":")
+        name (first split)
+        sort-order (some-> split second .toLowerCase)]
+    (when (and
+            (b/valid? {:sort-order sort-order}
+                      :sort-order [[v/member #{
+                                                "asc"
+                                                "desc"}]])
+            (b/valid? {:name name}
+                      :name [[v/member #{
+                                          ;now name only
+                                          "name"
+                                          }]]))
+      {(keyword name) (keyword sort-order)})))
+
+(defn parse-sort-order [query]
+  (when (not-empty query)
+    (->> (str/split query #",")
+         (map #(parse-sort-order-component %))
+         (apply merge))))
+
+(defn sort-by-map [sort-order-map result]
+  (if (empty? sort-order-map)
+    result
+    (loop [sort-order-vector (reverse (seq sort-order-map))
+           sorted-result result]
+      (if-let [sort-order (first sort-order-vector)]
+        (recur (rest sort-order-vector)
+               (cond->> sorted-result
+                        ;now name only
+                        (= :name (first sort-order))
+                        (sort-by :calendar/name (fn [v1 v2] (decide-sort-order (second sort-order) v1 v2)))))
+        sorted-result))))
 
 (defn list-resource [{:keys [datomic scheduler]}]
   (liberator/resource
@@ -54,14 +97,16 @@
                                 :calendar/name (:calendar/name cal)
                                 :calendar/holidays (:calendar/holidays cal)
                                 :calendar/weekly-holiday (pr-str (:calendar/weekly-holiday cal))}])))))
-   :handle-ok (fn [_]
+   :handle-ok (fn [{{{sort-order :sort-by} :params} :request}]
                 (->> (d/query datomic
                               '{:find [[(pull ?cal [:*]) ...]]
                                 :in [$]
                                 :where [[?cal :calendar/name]]})
                      (map (fn [cal]
                             (update-in cal [:calendar/weekly-holiday]
-                                       edn/read-string)))))))
+                                       edn/read-string)))
+                     (sort-by-map (parse-sort-order sort-order))
+                     ))))
 
 (defn entry-resource [{:keys [datomic scheduler]} name]
   (liberator/resource
