@@ -350,12 +350,13 @@
                         (sort-by (fn [m] (get-in m [:job/latest-execution :job-execution/batch-status :db/ident]))
                                  (fn [v1 v2] (decide-sort-order (second sort-order) v1 v2)))
                         (= :last-execution-duration (first sort-order))
-                        (sort-by (fn [m] (t/in-minutes
-                                           (t/interval
-                                             (c/from-date
-                                               (get-in m [:job/latest-execution :job-execution/start-time]))
-                                             (c/from-date
-                                               (get-in m [:job/latest-execution :job-execution/end-time])))))
+                        ;MIN
+                        (sort-by (fn [m]
+                                   (if (get-in m [:job/latest-execution :job-execution/end-time])
+                                   (-
+                                     (-> m (get-in  [:job/latest-execution :job-execution/end-time])  c/from-date c/to-long)
+                                     (-> m (get-in  [:job/latest-execution :job-execution/start-time])  c/from-date c/to-long))
+                                     nil))
                                  (fn [v1 v2] (decide-sort-order (second sort-order) v1 v2)))
                         (= :next-execution-start (first sort-order))
                         (sort-by (fn [m] (get-in m [:job/next-execution :job-execution/start-time]))
