@@ -205,8 +205,6 @@
                       (:exit-status qmap "")
                       (:batch-status qmap ""))]
     {:results (->> jobs
-                   (drop (dec (or offset 0)))
-                   (take (or limit 20))
                    (map #(->> (first %)
                               (d/pull datomic
                                       '[:*
@@ -402,6 +400,8 @@
                                                                                                           :status-notification/type] (:db/id sn))))
                                                                                          vec)}))))))
                                 (sort-by-map sort-order)
+                                (drop (dec (to-int offset 0)))
+                                (take (to-int limit 20))
                                 vec)))))
 
 (defn list-resource [{:keys [datomic scheduler] :as jobs} app-name]
