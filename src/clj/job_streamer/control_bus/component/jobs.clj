@@ -333,10 +333,10 @@
                      :job-execution/batch-status {:db/ident :batch-status/registered}}) schedules)))
     executions))
 
-(defn sort-by-map [sort-order-map result]
-  (if (empty? sort-order-map)
+(defn sort-by-map [sort-order result]
+  (if (empty? sort-order)
     result
-    (loop [sort-order-vector (reverse (seq sort-order-map))
+    (loop [sort-order-vector (reverse (seq sort-order))
            sorted-result result]
       (if-let [sort-order (first sort-order-vector)]
         (recur (rest sort-order-vector)
@@ -350,7 +350,6 @@
                         (sort-by (fn [m] (get-in m [:job/latest-execution :job-execution/batch-status :db/ident]))
                                  (fn [v1 v2] (decide-sort-order (second sort-order) v1 v2)))
                         (= :last-execution-duration (first sort-order))
-                        ;MIN
                         (sort-by (fn [m]
                                    (if (get-in m [:job/latest-execution :job-execution/end-time])
                                    (-
@@ -372,7 +371,7 @@
                             #"\s*,\s*")
                           (map keyword)
                           set)
-         sort-order-map (parse-sort-order sort-order)]
+         sort-order (parse-sort-order sort-order)]
     (update-in js [:results]
                (fn [result](->> result
                                 (map (fn [{job-name :job/name
@@ -402,7 +401,7 @@
                                                                                                           :status-notification/exit-status
                                                                                                           :status-notification/type] (:db/id sn))))
                                                                                          vec)}))))))
-                                (sort-by-map sort-order-map)
+                                (sort-by-map sort-order)
                                 vec)))))
 
 (defn list-resource [{:keys [datomic scheduler] :as jobs} app-name]
