@@ -47,8 +47,10 @@
     (handler request)))
 
 (defn setup-execution [{:keys [datomic] :as jobs}
-                       {:keys [db/id job-execution/end-time job-execution/create-time]
-                        :or {job-execution/end-time (java.util.Date.)
+                       {:keys [job-execution/start-time db/id job-execution/end-time job-execution/create-time]
+                        :or {
+                             job-execution/start-time (java.util.Date.)
+                             job-execution/end-time (java.util.Date.)
                              job-execution/create-time (java.util.Date.)}}]
   (let [execution-id (d/tempid :db.part/user)]
     (-> (d/transact
@@ -57,7 +59,8 @@
            :job-execution/batch-status :batch-status/undispatched
            :job-execution/create-time create-time
            :job-execution/end-time end-time
-           :job-execution/exit-status "COMPLETE"
+           :job-execution/start-time start-time
+           :job-execution/exit-status "COMPLETED"
            :job-execution/job-parameters "{}"}
           [:db/add id :job/executions execution-id]])
         :tempids)))
@@ -115,32 +118,46 @@
         (is (= "job2" (get-in res [:results 0 :job/name])))))
 
     (let [job-id (get-in (jobs/find-all (:jobs system) "default" "job1") [:results 0 :db/id])
-          end-time (.toDate (f/parse (:date f/formatters) "2016-09-09"))]
+          create-time (.toDate (f/parse (:date f/formatters) "2016-09-01"))
+          start-time (.toDate (f/parse (:date f/formatters) "2016-09-09"))
+          end-time (.toDate (f/parse (:date f/formatters) "2016-09-10"))]
       (setup-execution (:jobs system)
-                       {:db/id job-id :job-execution/end-time end-time})
+                       {:db/id job-id
+                        :job-execution/end-time end-time
+                        :job-execution/start-time start-time
+                        :job-execution/create-time create-time})
       (testing "since"
         (let [res (jobs/find-all (:jobs system) "default" "since:2016-09-09")]
           (pprint res)
           (is (= 1 (:hits res)))
           (is (= "job1" (get-in res [:results 0 :job/name])))))
       (testing "until"
-        (let [res (jobs/find-all (:jobs system) "default" "until:2016-09-09")]
+        (let [res (jobs/find-all (:jobs system) "default" "until:2016-09-10")]
           (is (= 1 (:hits res)))
           (is (= "job1" (get-in res [:results 0 :job/name])))))
       (testing "range"
-        (let [res (jobs/find-all (:jobs system) "default" "since:2016-09-09 until:2016-09-09")]
+        (let [res (jobs/find-all (:jobs system) "default" "since:2016-09-09 until:2016-09-10")]
           (is (= 1 (:hits res)))
           (is (= "job1" (get-in res [:results 0 :job/name])))))
-
-
-      )))
+      (testing "exit-status"
+        (let [res (jobs/find-all (:jobs system) "default" "exit-status:COMPLETED")]
+          (is (= 1 (:hits res)))
+          (is (= "job1" (get-in res [:results 0 :job/name])))))
+      (testing "batch-status"
+        (let [res (jobs/find-all (:jobs system) "default" "batch-status:undispatched")]
+          (is (= 1 (:hits res)))
+          (is (= "job1" (get-in res [:results 0 :job/name]))))))))
 
 (deftest parse-query
   (testing "parse-query"
-    (let [result (jobs/parse-query "a b since:2016-09-01 until:2016-09-02 exit-status:COMPLETED")]
+    (let [result (jobs/parse-query "a b since:2016-09-01 until:2016-09-02 exit-status:COMPLETED batch-status:failed")]
       (is (= "a" (first (:job-name result))))
       (is (= "2016-09-01" (some->> result :since (new DateTime) (f/unparse (:date f/formatters)))))
       (is (= "2016-09-03" (some->> result :until (new DateTime) (f/unparse (:date f/formatters)))))
+      (is (=  "COMPLETED" (:exit-status result)))
+      (is (= :batch-status/failed (:batch-status result)))))
+  (testing "exit-status is lowwer case"
+    (let [result (jobs/parse-query "exit-status:completed")]
       (is (=  "COMPLETED" (:exit-status result)))))
   (testing "nil query returns nil"
     (let [result (jobs/parse-query nil)]
