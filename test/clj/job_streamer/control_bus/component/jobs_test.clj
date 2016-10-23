@@ -93,6 +93,24 @@
       (let [res (jobs/find-all (:jobs system) "default" nil)]
         (is (= 1 (:hits res)))))))
 
+(deftest download-list-resource
+  (let [system (new-system config)
+        handler (-> (jobs/download-list-resource (:jobs system) "default"))]
+    (create-app system)
+    (testing "no jobs"
+      (let [request {:request-method :get}]
+        (is (empty? (-> (handler request) :body read-string)))))
+    (testing "has a job"
+      (let [request {:request-method :post
+                     :content-type "application/edn"
+                     :body (pr-str {:job/name "job1"})}]
+        (is (= 201 (-> ((-> (jobs/list-resource (:jobs system) "default")) request) :status))))
+      (let [request {:request-method :get}
+            response (handler request)]
+        (is (= "job1" (-> response :body read-string first :job/name)))
+        (is (= "application/force-download"  ((:headers response) "Content-Type")))
+        (is (= "attachment; filename=\"jobs.edn\""  ((:headers response) "Content-disposition")))))))
+
 (deftest find-all-with-query
   (let [system (new-system config)
         handler (-> (jobs/list-resource (:jobs system) "default"))]

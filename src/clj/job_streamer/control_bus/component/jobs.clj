@@ -7,6 +7,8 @@
             [liberator.core :as liberator]
             [clojure.string :as str]
             [clj-time.format :as f]
+            [liberator.representation :refer [ring-response]]
+            [ring.util.response :refer [response content-type header]]
             (job-streamer.control-bus [notification :as notification]
                                       [validation :refer [validate]]
                                       [util :refer [parse-body edn->datoms to-int]])
@@ -191,7 +193,7 @@
                    vec)
      :hits   (count jobs)
      :offset offset
-     :limit limit}))
+     :limit  limit}))
 
 (defn find-executions [{:keys [datomic]} app-name job-name & [offset limit]]
   (let [executions (d/query datomic
@@ -296,6 +298,45 @@
                      :job-execution/batch-status {:db/ident :batch-status/registered}}) schedules)))
     executions))
 
+(defn- include-job-attrs [{:keys [datomic scheduler] :as jobs} with-params job-list]
+  (update-in
+   job-list [:results]
+   #(->> %
+         (map (fn [{job-name :job/name
+                    executions :job/executions
+                    schedule :job/schedule :as job}]
+                (merge {:job/name job-name}
+                       (when (with-params :execution)
+                         {:job/executions (append-schedule scheduler (:db/id job) executions schedule)
+                          :job/latest-execution (find-latest-execution executions)
+                          :job/next-execution   (find-next-execution jobs job)})
+                       (when (with-params :schedule)
+                         {:job/schedule schedule})
+                       (when (with-params :notation)
+                         {:job/edn-notation (:job/edn-notation job)})
+                       (when (with-params :settings)
+                         (merge {:job/exclusive? (get job :job/exclusive? false)}
+                                (when-let [time-monitor (get-in job [:job/time-monitor :db/id])]
+                                  {:job/time-monitor (d/pull datomic
+                                                             '[:time-monitor/duration
+                                                               {:time-monitor/action [:db/ident]}
+                                                               :time-monitor/notification-type] time-monitor)})
+                                (when-let [status-notifications (:job/status-notifications job)]
+                                  {:job/status-notifications (->> status-notifications
+                                                                  (map (fn [sn]
+                                                                         (d/pull datomic
+                                                                                 '[{:status-notification/batch-status [:db/ident]}
+                                                                                   :status-notification/exit-status
+                                                                                   :status-notification/type] (:db/id sn))))
+                                                                  vec)}))))))
+         vec)))
+
+(defn parse-with-params [with-params]
+  (->> (clojure.string/split
+        (or (not-empty with-params) "execution")
+        #"\s*,\s*")
+       (map keyword)
+       set))
 
 (defn list-resource [{:keys [datomic scheduler] :as jobs} app-name]
   (liberator/resource
@@ -316,47 +357,28 @@
                           (conj datoms
                                 [:db/add [:application/name app-name] :application/jobs job-id]))
               job))
+   :handle-ok (fn [{{{query :q with-params :with :keys [limit offset]} :params} :request}]
+                (->> (find-all jobs app-name query
+                              (to-int offset 0)
+                              (to-int limit 20))
+                     (include-job-attrs jobs (parse-with-params with-params))))
+   :etag (str (int (/ (System/currentTimeMillis) 10000)))))
 
-   :handle-ok (fn [{{{query :q with-param :with :keys [limit offset]} :params} :request}]
-                (let [js (find-all jobs app-name query
+(defn download-list-resource [{:keys [datomic scheduler] :as jobs} app-name]
+  (liberator/resource
+   :available-media-types ["application/edn" "application/json"]
+   :allowed-methods [:get]
+   :handle-ok (fn [{{{query :q with-params :with :keys [limit offset]} :params} :request}]
+                (-> (->> (find-all jobs app-name query
                                    (to-int offset 0)
-                                   (to-int limit 20))
-                      with-params (->> (clojure.string/split
-                                        (or (not-empty with-param) "execution")
-                                        #"\s*,\s*")
-                                       (map keyword)
-                                       set)]
-                  (update-in js [:results]
-                             #(->> %
-                                   (map (fn [{job-name :job/name
-                                              executions :job/executions
-                                              schedule :job/schedule :as job}]
-                                          (merge {:job/name job-name}
-                                                 (when (with-params :execution)
-                                                   {:job/executions (append-schedule scheduler (:db/id job) executions schedule)
-                                                    :job/latest-execution (find-latest-execution executions)
-                                                    :job/next-execution   (find-next-execution jobs job)})
-                                                 (when (with-params :schedule)
-                                                   {:job/schedule schedule})
-                                                 (when (with-params :notation)
-                                                   {:job/edn-notation (:job/edn-notation job)})
-                                                 (when (with-params :settings)
-                                                   (merge {:job/exclusive? (get job :job/exclusive? false)}
-                                                          (when-let [time-monitor (get-in job [:job/time-monitor :db/id])]
-                                                            {:job/time-monitor (d/pull datomic
-                                                                                       '[:time-monitor/duration
-                                                                                             {:time-monitor/action [:db/ident]}
-                                                                                             :time-monitor/notification-type] time-monitor)})
-                                                          (when-let [status-notifications (:job/status-notifications job)]
-                                                            {:job/status-notifications (->> status-notifications
-                                                                                            (map (fn [sn]
-                                                                                                   (d/pull datomic
-                                                                                                           '[{:status-notification/batch-status [:db/ident]}
-                                                                                                             :status-notification/exit-status
-                                                                                                             :status-notification/type] (:db/id sn))))
-                                                                                            vec)}))))))
-                                   vec))))
-    :etag (str (int (/ (System/currentTimeMillis) 10000)))))
+                                   (to-int limit 1000))
+                         (include-job-attrs jobs (parse-with-params with-params)))
+                    :results
+                    pr-str
+                    response
+                    (content-type "application/force-download")
+                    (header "Content-disposition" "attachment; filename=\"jobs.edn\"")
+                    (ring-response)))))
 
 
 (defn entry-resource [{:keys [datomic scheduler] :as jobs} app-name job-name]
