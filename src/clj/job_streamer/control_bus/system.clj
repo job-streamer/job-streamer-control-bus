@@ -4,6 +4,7 @@
             [duct.component.handler :refer [handler-component]]
             [duct.middleware.not-found :refer [wrap-not-found]]
             [meta-merge.core :refer [meta-merge]]
+            [ring.middleware.multipart-params :refer [wrap-multipart-params]]
             [ring.middleware.defaults :refer [wrap-defaults api-defaults]]
             [ring.util.response :refer [header]]
             (job-streamer.control-bus.component
@@ -37,6 +38,7 @@
 (def base-config
   {:app {:middleware [[wrap-not-found :not-found]
                       [wrap-same-origin-policy :same-origin]
+                      [wrap-multipart-params]
                       [wrap-defaults :defaults]]
 
          :not-found  "Resource Not Found"
