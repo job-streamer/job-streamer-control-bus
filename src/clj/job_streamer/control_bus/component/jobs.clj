@@ -422,7 +422,8 @@
                                  (include-job-attrs jobs (parse-with-params with-params))
                                  (sort-by-map (parse-sort-order sort-order))
                                  (drop (dec (to-int offset 0)))
-                                 (take (to-int limit 20)))
+                                 (take (to-int limit 20))
+                                 vec)
                    :hits   (count res)
                    :limit  (to-int limit 20)
                    :offset (to-int offset 0)}))
@@ -438,13 +439,13 @@
                          (include-job-attrs jobs (parse-with-params with-params))
                          (sort-by-map (parse-sort-order sort-order))
                          (drop (dec (to-int offset 0)))
-                         (take (to-int limit 99999)))
+                         (take (to-int limit 99999))
+                         vec)
                     pr-str
                     response
                     (content-type "application/force-download")
                     (header "Content-disposition" "attachment; filename=\"jobs.edn\"")
                     (ring-response)))))
-
 
 (defn entry-resource [{:keys [datomic scheduler] :as jobs} app-name job-name]
   (liberator/resource
