@@ -6,6 +6,7 @@
             [bouncer.validators :as v]
             [clojure.string :as str]
             [com.stuartsierra.component :as component]
+            [ring.util.response :refer [response content-type header]]
             (job-streamer.control-bus [validation :refer (validate)]
                                       [util :refer [parse-body]])
             (job-streamer.control-bus.component [datomic :as d]
@@ -61,7 +62,8 @@
                         (sort-by :calendar/name (fn [v1 v2] (decide-sort-order (second sort-order) v1 v2)))))
         sorted-result))))
 
-(defn list-resource [{:keys [datomic scheduler]}]
+(defn list-resource
+  [{:keys [datomic scheduler]} & {:keys [download?] :or {download? false}}]
   (liberator/resource
    :available-media-types ["application/edn" "application/json"]
    :allowed-methods [:get :post]
@@ -78,7 +80,6 @@
                 true))
 
    :post! (fn [{cal :edn}]
-            (println cal)
             (let [id (or (:db/id cal) (d/tempid :db.part/user))]
               (if-let [old-id (d/query datomic
                                        '{:find [?calendar .]
@@ -98,15 +99,23 @@
                                 :calendar/holidays (:calendar/holidays cal)
                                 :calendar/weekly-holiday (pr-str (:calendar/weekly-holiday cal))}])))))
    :handle-ok (fn [{{{sort-order :sort-by} :params} :request}]
-                (->> (d/query datomic
+                (let [res (->> (d/query datomic
                               '{:find [[(pull ?cal [:*]) ...]]
                                 :in [$]
                                 :where [[?cal :calendar/name]]})
-                     (map (fn [cal]
-                            (update-in cal [:calendar/weekly-holiday]
-                                       edn/read-string)))
-                     (sort-by-map (parse-sort-order sort-order))
-                     ))))
+                               (map (fn [cal]
+                                      (update-in cal [:calendar/weekly-holiday]
+                                                 edn/read-string)))
+                               (sort-by-map (parse-sort-order sort-order))
+                               vec)]
+                  (if download?
+                    (-> (map #(dissoc % :db/id) res)
+                        pr-str
+                        response
+                        (content-type "application/force-download")
+                        (header "Content-disposition" "attachment; filename=\"cals.edn\"")
+                        (ring-response))
+                    res)))))
 
 (defn entry-resource [{:keys [datomic scheduler]} name]
   (liberator/resource

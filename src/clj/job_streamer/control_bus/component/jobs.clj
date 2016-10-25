@@ -348,6 +348,23 @@
                       (when-let [end-time (:end-time execution)]
                         {:job-execution/end-time end-time}))]))
 
+(defn save-status-notification
+  "Save a given status notification."
+  [{:keys [datomic] :as jobs} job-id settings]
+  (let [status-notification-id (d/tempid :db.part/user)
+        tempids (-> (d/transact
+                     datomic
+                     [[:db/add job-id
+                       :job/status-notifications status-notification-id]
+                      (merge {:db/id status-notification-id
+                              :status-notification/type (:status-notification/type settings)}
+                             (when-let [batch-status (:status-notification/batch-status settings)]
+                               {:status-notification/batch-status batch-status})
+                             (when-let [exit-status (:status-notification/exit-status settings)]
+                               {:status-notification/exit-status exit-status}))])
+                    :tempids)]
+    {:db/id (d/resolve-tempid datomic tempids status-notification-id)}))
+
 (defn- append-schedule [scheduler job-id executions schedule]
   (if (:schedule/active? schedule)
     (let [schedules (scheduler/fire-times scheduler job-id)]
@@ -389,14 +406,17 @@
                                                                 vec)}))))))
        vec))
 
-(defn parse-with-params [with-params]
+(defn parse-with-params
+  "Parse `with` parameter for separating by comma"
+  [with-params]
   (->> (clojure.string/split
         (or (not-empty with-params) "execution")
         #"\s*,\s*")
        (map keyword)
        set))
 
-(defn list-resource [{:keys [datomic scheduler] :as jobs} app-name]
+(defn list-resource
+  [{:keys [datomic scheduler] :as jobs} app-name & {:keys [download?] :or {download? false}}]
   (liberator/resource
    :available-media-types ["application/edn" "application/json"]
    :allowed-methods [:get :post]
@@ -414,38 +434,35 @@
               (d/transact datomic
                           (conj datoms
                                 [:db/add [:application/name app-name] :application/jobs job-id]))
+              (doseq [notification (:job/status-notifications job)]
+                (save-status-notification jobs job-id notification))
+              (when-let [schedule (:job/schedule job)]
+                (scheduler/schedule
+                 scheduler job-id
+                 (:schedule/cron-notation schedule)
+                 nil)) ;; FIXME A Calendar cannnot be set here.
               job))
    :handle-ok (fn [{{{query :q with-params :with sort-order :sort-by
                       :keys [limit offset]} :params} :request}]
-                (let [res (->> (find-all jobs app-name query))]
-                  {:results (->> res
-                                 (include-job-attrs jobs (parse-with-params with-params))
-                                 (sort-by-map (parse-sort-order sort-order))
-                                 (drop (dec (to-int offset 0)))
-                                 (take (to-int limit 20))
-                                 vec)
-                   :hits   (count res)
-                   :limit  (to-int limit 20)
-                   :offset (to-int offset 0)}))
+                (let [job-list (->> (find-all jobs app-name query))
+                      res (->> job-list
+                               (include-job-attrs jobs (parse-with-params with-params))
+                               (sort-by-map (parse-sort-order sort-order))
+                               (drop (dec (to-int offset 0)))
+                               (take (to-int limit (if download? 99999 20)))
+                               vec)]
+                  (if download?
+                    (-> res
+                        pr-str
+                        response
+                        (content-type "application/force-download")
+                        (header "Content-disposition" "attachment; filename=\"jobs.edn\"")
+                        (ring-response))
+                    {:results res
+                     :hits    (count job-list)
+                     :limit   (to-int limit 20)
+                     :offset  (to-int offset 0)})))
    :etag (str (int (/ (System/currentTimeMillis) 10000)))))
-
-(defn download-list-resource [{:keys [datomic scheduler] :as jobs} app-name]
-  (liberator/resource
-   :available-media-types ["application/edn" "application/json"]
-   :allowed-methods [:get]
-   :handle-ok (fn [{{{query :q with-params :with sort-order :sort-by
-                      :keys [limit offset]} :params} :request}]
-                (-> (->> (find-all jobs app-name query)
-                         (include-job-attrs jobs (parse-with-params with-params))
-                         (sort-by-map (parse-sort-order sort-order))
-                         (drop (dec (to-int offset 0)))
-                         (take (to-int limit 99999))
-                         vec)
-                    pr-str
-                    response
-                    (content-type "application/force-download")
-                    (header "Content-disposition" "attachment; filename=\"jobs.edn\"")
-                    (ring-response)))))
 
 (defn entry-resource [{:keys [datomic scheduler] :as jobs} app-name job-name]
   (liberator/resource
@@ -462,7 +479,7 @@
               (d/transact datomic
                           [[:db.fn/retractEntity job-id]
                            [:db/retract app-id :application/jobs job-id]]))
-  :handle-ok (fn [ctx]
+   :handle-ok (fn [ctx]
                (let [job (d/pull datomic
                                  '[:*
                                    {(limit :job/executions 99999)
@@ -499,6 +516,7 @@
                        :job/dynamic-parameters (extract-job-parameters job))
                      (dissoc :job/executions))))))
 
+
 (defn job-settings-resource [{:keys [datomic] :as jobs} app-name job-name & [cmd]]
   (liberator/resource
    :available-media-types ["application/edn" "application/json"]
@@ -517,19 +535,7 @@
             (if-let [id (:db/id settings)]
               (d/transact datomic
                           [[:db/retract job-id :job/status-notifications id]])
-              (let [status-notification-id (d/tempid :db.part/user)
-                    tempids (-> (d/transact
-                                 datomic
-                                 [[:db/add job-id
-                                   :job/status-notifications status-notification-id]
-                                  (merge {:db/id status-notification-id
-                                          :status-notification/type (:status-notification/type settings)}
-                                         (when-let [batch-status (:status-notification/batch-status settings)]
-                                           {:status-notification/batch-status batch-status})
-                                         (when-let [exit-status (:status-notification/exit-status settings)]
-                                           {:status-notification/exit-status exit-status}))])
-                                :tempids)]
-                {:db/id (d/resolve-tempid datomic tempids status-notification-id)}))
+              (save-status-notification jobs job-id settings))
 
             :time-monitor
             (d/transact datomic

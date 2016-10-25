@@ -97,7 +97,7 @@
 
 (deftest download-list-resource
   (let [system (new-system config)
-        handler (-> (jobs/download-list-resource (:jobs system) "default"))]
+        handler (-> (jobs/list-resource (:jobs system) "default" :download? true))]
     (create-app system)
     (testing "no jobs"
       (let [request {:request-method :get}]
