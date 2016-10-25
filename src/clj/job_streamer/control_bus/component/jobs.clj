@@ -17,10 +17,7 @@
             (job-streamer.control-bus.component [datomic :as d]
                                                 [agents  :as ag]
                                                 [scheduler :as scheduler]))
-  (:import [java.util Date]
-           [java.nio.file Files]
-           [java.nio.file.attribute FileAttribute])
-  (:use [clojure.java.io]))
+  (:import [java.util Date]))
 
 (defn find-latest-execution
   "Find latest from given executions."
@@ -162,7 +159,40 @@
          (map #(parse-sort-order-component %))
          (apply merge))))
 
-(defn find-all [{:keys [datomic]} app-name query & [offset limit]]
+(defn sort-by-map [sort-order job-list]
+  (if (empty? sort-order)
+    job-list
+    (loop [sort-order-vector (reverse (seq sort-order))
+           sorted-result job-list]
+      (if-let [[sort-key direction] (first sort-order-vector)]
+        (recur (rest sort-order-vector)
+               (cond->> sorted-result
+                        (= :name sort-key)
+                        (sort-by :job/name (fn [v1 v2] (decide-sort-order direction v1 v2)))
+
+                        (= :last-execution-started sort-key)
+                        (sort-by (fn [m] (get-in m [:job/latest-execution :job-execution/start-time]))
+                                 (fn [v1 v2] (decide-sort-order direction v1 v2)))
+
+                        (= :last-execution-status sort-key)
+                        (sort-by (fn [m] (get-in m [:job/latest-execution :job-execution/batch-status :db/ident]))
+                                 (fn [v1 v2] (decide-sort-order direction v1 v2)))
+
+                        (= :last-execution-duration sort-key)
+                        (sort-by (fn [m]
+                                   (if (get-in m [:job/latest-execution :job-execution/end-time])
+                                     (-
+                                      (-> m (get-in  [:job/latest-execution :job-execution/end-time])  c/from-date c/to-long)
+                                      (-> m (get-in  [:job/latest-execution :job-execution/start-time])  c/from-date c/to-long))
+                                     nil))
+                                 (fn [v1 v2] (decide-sort-order direction v1 v2)))
+
+                        (= :next-execution-start sort-key)
+                        (sort-by (fn [m] (get-in m [:job/next-execution :job-execution/start-time]))
+                                 (fn [v1 v2] (decide-sort-order direction v1 v2)))))
+        sorted-result))))
+
+(defn find-all [{:keys [datomic]} app-name query]
   (let [qmap (parse-query query)
         base-query '{:find [?job]
                      :in [$ ?app-name [?job-name-condition ...] ?since-condition ?until-condition ?exit-status-condition ?batch-status-condition]
@@ -204,29 +234,26 @@
                       (:until qmap "")
                       (:exit-status qmap "")
                       (:batch-status qmap ""))]
-    {:results (->> jobs
-                   (map #(->> (first %)
-                              (d/pull datomic
-                                      '[:*
-                                        {(limit :job/executions 99999)
-                                         [:db/id
-                                          :job-execution/create-time
-                                          :job-execution/start-time
-                                          :job-execution/end-time
-                                          :job-execution/exit-status
-                                          {:job-execution/batch-status [:db/ident]}]}
-                                        {:job/schedule
-                                         [:db/id :schedule/cron-notation :schedule/active?]}])))
-                   (map (fn [job]
-                          (update-in job [:job/executions]
-                                     (fn [executions]
-                                       (->> executions
-                                            (sort-by :job-execution/create-time #(compare %2 %1))
-                                            (take 100))))))
-                  vec)
-     :hits   (count jobs)
-     :offset offset
-     :limit limit}))
+    (->> jobs
+         (map #(->> (first %)
+                    (d/pull datomic
+                            '[:*
+                              {(limit :job/executions 99999)
+                               [:db/id
+                                :job-execution/create-time
+                                :job-execution/start-time
+                                :job-execution/end-time
+                                :job-execution/exit-status
+                                {:job-execution/batch-status [:db/ident]}]}
+                              {:job/schedule
+                               [:db/id :schedule/cron-notation :schedule/active?]}])))
+         (map (fn [job]
+                (update-in job [:job/executions]
+                           (fn [executions]
+                             (->> executions
+                                  (sort-by :job-execution/create-time #(compare %2 %1))
+                                  (take 100))))))
+         vec)))
 
 (defn find-executions [{:keys [datomic]} app-name job-name & [offset limit]]
   (let [executions (d/query datomic
@@ -331,78 +358,43 @@
                      :job-execution/batch-status {:db/ident :batch-status/registered}}) schedules)))
     executions))
 
-(defn sort-by-map [sort-order result]
-  (if (empty? sort-order)
-    result
-    (loop [sort-order-vector (reverse (seq sort-order))
-           sorted-result result]
-      (if-let [sort-order (first sort-order-vector)]
-        (recur (rest sort-order-vector)
-               (cond->> sorted-result
-                        (= :name (first sort-order))
-                        (sort-by :job/name (fn [v1 v2] (decide-sort-order (second sort-order) v1 v2)))
-                        (= :last-execution-started (first sort-order))
-                        (sort-by (fn [m] (get-in m [:job/latest-execution :job-execution/start-time]))
-                                 (fn [v1 v2] (decide-sort-order (second sort-order) v1 v2)))
-                        (= :last-execution-status (first sort-order))
-                        (sort-by (fn [m] (get-in m [:job/latest-execution :job-execution/batch-status :db/ident]))
-                                 (fn [v1 v2] (decide-sort-order (second sort-order) v1 v2)))
-                        (= :last-execution-duration (first sort-order))
-                        (sort-by (fn [m]
-                                   (if (get-in m [:job/latest-execution :job-execution/end-time])
-                                   (-
-                                     (-> m (get-in  [:job/latest-execution :job-execution/end-time])  c/from-date c/to-long)
-                                     (-> m (get-in  [:job/latest-execution :job-execution/start-time])  c/from-date c/to-long))
-                                     nil))
-                                 (fn [v1 v2] (decide-sort-order (second sort-order) v1 v2)))
-                        (= :next-execution-start (first sort-order))
-                        (sort-by (fn [m] (get-in m [:job/next-execution :job-execution/start-time]))
-                                 (fn [v1 v2] (decide-sort-order (second sort-order) v1 v2)))))
-        sorted-result))))
+(defn include-job-attrs [{:keys [datomic scheduler] :as jobs} with-params job-list]
+  (->> job-list
+       (map (fn [{job-name :job/name
+                  executions :job/executions
+                  schedule :job/schedule :as job}]
+              (merge {:job/name job-name}
+                     (when (with-params :execution)
+                       {:job/executions (append-schedule scheduler (:db/id job) executions schedule)
+                        :job/latest-execution (find-latest-execution executions)
+                        :job/next-execution   (find-next-execution jobs job)})
+                     (when (with-params :schedule)
+                       {:job/schedule schedule})
+                     (when (with-params :notation)
+                       {:job/edn-notation (:job/edn-notation job)})
+                     (when (with-params :settings)
+                       (merge {:job/exclusive? (get job :job/exclusive? false)}
+                              (when-let [time-monitor (get-in job [:job/time-monitor :db/id])]
+                                {:job/time-monitor (d/pull datomic
+                                                           '[:time-monitor/duration
+                                                             {:time-monitor/action [:db/ident]}
+                                                             :time-monitor/notification-type] time-monitor)})
+                              (when-let [status-notifications (:job/status-notifications job)]
+                                {:job/status-notifications (->> status-notifications
+                                                                (map (fn [sn]
+                                                                       (d/pull datomic
+                                                                               '[{:status-notification/batch-status [:db/ident]}
+                                                                                 :status-notification/exit-status
+                                                                                 :status-notification/type] (:db/id sn))))
+                                                                vec)}))))))
+       vec))
 
-(defn find-all-convert-into-retval-format [{:keys [scheduler datomic] :as jobs} app-name query offset limit with-param sort-order]
-  (let [ js (find-all jobs app-name query
-                      (to-int offset 0)
-                      (to-int limit 20))
-         with-params (->> (clojure.string/split
-                            (or (not-empty with-param) "execution")
-                            #"\s*,\s*")
-                          (map keyword)
-                          set)
-         sort-order (parse-sort-order sort-order)]
-    (update-in js [:results]
-               (fn [result](->> result
-                                (map (fn [{job-name :job/name
-                                           executions :job/executions
-                                           schedule :job/schedule :as job}]
-                                       (merge {:job/name job-name}
-                                              (when (with-params :execution)
-                                                {:job/executions (append-schedule scheduler (:db/id job) executions schedule)
-                                                 :job/latest-execution (find-latest-execution executions)
-                                                 :job/next-execution   (find-next-execution jobs job)})
-                                              (when (with-params :schedule)
-                                                {:job/schedule schedule})
-                                              (when (with-params :notation)
-                                                {:job/edn-notation (:job/edn-notation job)})
-                                              (when (with-params :settings)
-                                                (merge {:job/exclusive? (get job :job/exclusive? false)}
-                                                       (when-let [time-monitor (get-in job [:job/time-monitor :db/id])]
-                                                         {:job/time-monitor (d/pull datomic
-                                                                                    '[:time-monitor/duration
-                                                                                      {:time-monitor/action [:db/ident]}
-                                                                                      :time-monitor/notification-type] time-monitor)})
-                                                       (when-let [status-notifications (:job/status-notifications job)]
-                                                         {:job/status-notifications (->> status-notifications
-                                                                                         (map (fn [sn]
-                                                                                                (d/pull datomic
-                                                                                                        '[{:status-notification/batch-status [:db/ident]}
-                                                                                                          :status-notification/exit-status
-                                                                                                          :status-notification/type] (:db/id sn))))
-                                                                                         vec)}))))))
-                                (sort-by-map sort-order)
-                                (drop (dec (to-int offset 0)))
-                                (take (to-int limit 20))
-                                vec)))))
+(defn parse-with-params [with-params]
+  (->> (clojure.string/split
+        (or (not-empty with-params) "execution")
+        #"\s*,\s*")
+       (map keyword)
+       set))
 
 (defn list-resource [{:keys [datomic scheduler] :as jobs} app-name]
   (liberator/resource
@@ -423,19 +415,35 @@
                           (conj datoms
                                 [:db/add [:application/name app-name] :application/jobs job-id]))
               job))
-   :handle-ok (fn [{{{query :q with-param :with sort-order :sort-by :keys [limit offset]} :params} :request}]
-                (find-all-convert-into-retval-format jobs app-name query offset limit with-param sort-order))
-    :etag (str (int (/ (System/currentTimeMillis) 10000)))))
+   :handle-ok (fn [{{{query :q with-params :with sort-order :sort-by
+                      :keys [limit offset]} :params} :request}]
+                (let [res (->> (find-all jobs app-name query))]
+                  {:results (->> res
+                                 (include-job-attrs jobs (parse-with-params with-params))
+                                 (sort-by-map (parse-sort-order sort-order))
+                                 (drop (dec (to-int offset 0)))
+                                 (take (to-int limit 20)))
+                   :hits   (count res)
+                   :limit  (to-int limit 20)
+                   :offset (to-int offset 0)}))
+   :etag (str (int (/ (System/currentTimeMillis) 10000)))))
 
 (defn download-list-resource [{:keys [datomic scheduler] :as jobs} app-name]
   (liberator/resource
    :available-media-types ["application/edn" "application/json"]
    :allowed-methods [:get]
-   :handle-ok (fn [{{{query :q with-param :with sort-order :sort-by :keys [limit offset]} :params} :request}]
-                          (-> (response (pr-str (:results (find-all-convert-into-retval-format jobs app-name query offset limit with-param sort-order))))
-                              (content-type "application/force-download")
-                              (header "Content-disposition" "attachment; filename=\"jobs.edn\"")
-                              (ring-response)))))
+   :handle-ok (fn [{{{query :q with-params :with sort-order :sort-by
+                      :keys [limit offset]} :params} :request}]
+                (-> (->> (find-all jobs app-name query)
+                         (include-job-attrs jobs (parse-with-params with-params))
+                         (sort-by-map (parse-sort-order sort-order))
+                         (drop (dec (to-int offset 0)))
+                         (take (to-int limit 99999)))
+                    pr-str
+                    response
+                    (content-type "application/force-download")
+                    (header "Content-disposition" "attachment; filename=\"jobs.edn\"")
+                    (ring-response)))))
 
 
 (defn entry-resource [{:keys [datomic scheduler] :as jobs} app-name job-name]
