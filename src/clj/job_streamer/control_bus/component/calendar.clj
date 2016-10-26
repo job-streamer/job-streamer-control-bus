@@ -62,8 +62,15 @@
                         (sort-by :calendar/name (fn [v1 v2] (decide-sort-order (second sort-order) v1 v2)))))
         sorted-result))))
 
+(defn find-calendar-by-name [{:keys [datomic]} cal-name]
+  (d/query datomic
+           '{:find [?calendar .]
+             :in [$ ?calendar-name]
+             :where [[?calendar :calendar/name ?calendar-name]]}
+           cal-name))
+
 (defn list-resource
-  [{:keys [datomic scheduler]} & {:keys [download?] :or {download? false}}]
+  [{:keys [datomic scheduler] :as component} & {:keys [download?] :or {download? false}}]
   (liberator/resource
    :available-media-types ["application/edn" "application/json"]
    :allowed-methods [:get :post]
@@ -71,33 +78,19 @@
                           :calendar/name v/required)
    :exists? (fn [{{cal-name :calendar/name} :edn :as ctx}]
               (if (#{:post} (get-in ctx [:request :request-method]))
-                (when-let [cal (d/query datomic
-                                        '{:find [?e .]
-                                          :in [$ ?n]
-                                          :where [[?e :calendar/name ?n]]}
-                                        cal-name)]
-                  {:cal-id cal})
+                (when-let [id (find-calendar-by-name component cal-name)]
+                  {:cal-id id})
                 true))
 
-   :post! (fn [{cal :edn}]
-            (let [id (or (:db/id cal) (d/tempid :db.part/user))]
-              (if-let [old-id (d/query datomic
-                                       '{:find [?calendar .]
-                                         :in [$ ?calendar-name]
-                                         :where [[?calendar :calendar/name ?calendar-name]]}
-                                       (:calendar/name cal))]
-                (d/transact datomic
-                            [{:db/id old-id
-                              :calendar/name (:calendar/name cal)
-                              :calendar/holidays (:calendar/holidays cal [])
-                              :calendar/weekly-holiday (pr-str (:calendar/weekly-holiday cal))}])
-                (do
-                  (scheduler/add-calendar scheduler cal)
-                  (d/transact datomic
-                              [{:db/id id
-                                :calendar/name (:calendar/name cal)
-                                :calendar/holidays (:calendar/holidays cal)
-                                :calendar/weekly-holiday (pr-str (:calendar/weekly-holiday cal))}])))))
+   :post! (fn [{cal :edn :as ctx}]
+            (d/transact datomic
+                        [{:db/id (or (:cal-id ctx) (d/tempid :db.part/user))
+                          :calendar/name (:calendar/name cal)
+                          :calendar/holidays (:calendar/holidays cal [])
+                          :calendar/weekly-holiday (pr-str (:calendar/weekly-holiday cal))}])
+            (when-not (:cal-id ctx)
+              (scheduler/add-calendar scheduler cal)))
+
    :handle-ok (fn [{{{sort-order :sort-by} :params} :request}]
                 (let [res (->> (d/query datomic
                               '{:find [[(pull ?cal [:*]) ...]]
