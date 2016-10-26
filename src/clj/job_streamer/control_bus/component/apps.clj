@@ -38,29 +38,30 @@
 
 
 (defn scan-components [classpaths]
-  (when-let [java-cmd (some-> (System/getProperty "java.home") (str "/bin/java"))]
-    (log/info "Scan batch components...")
-    (let [this-cps (classpath (clojure.lang.RT/baseLoader))
-          cmd (into-array (concat [java-cmd
-                                   "-cp"
-                                   (->> (vec this-cps)
-                                        (map io/file)
-                                        (clojure.string/join ":"))
-                                   "net.unit8.job_streamer.control_bus.BatchComponentScanner"]
-                                  classpaths))
-          proc (.exec (Runtime/getRuntime) cmd)]
-      (log/debug (clojure.string/join " " cmd))
-      (with-open [rdr (io/reader (.getInputStream proc))]
-        (->> (line-seq rdr)
-             (map #(clojure.string/split % #":" 2))
-             (map (fn [[category class-name]]
-                    {(keyword "batch-component" category) class-name}))
-             (reduce #(merge-with conj %1 %2)
-                     {:batch-component/batchlet []
-                      :batch-component/item-reader []
-                      :batch-component/item-writer []
-                      :batch-component/item-processor []
-                      :batch-component/throwable []}))))))
+  (let [fs (System/getProperty "file.separator")]
+    (when-let [java-cmd (some-> (System/getProperty "java.home") (str fs "bin" fs "java"))]
+      (log/info "Scan batch components...")
+      (let [this-cps (classpath (clojure.lang.RT/baseLoader))
+            cmd (into-array (concat [java-cmd
+                                     "-cp"
+                                     (->> (vec this-cps)
+                                          (map io/file)
+                                          (clojure.string/join (if (= fs "\\") ";" ":")))
+                                     "net.unit8.job_streamer.control_bus.BatchComponentScanner"]
+                                    classpaths))
+            proc (.exec (Runtime/getRuntime) cmd)]
+        (log/debug (clojure.string/join " " cmd))
+        (with-open [rdr (io/reader (.getInputStream proc))]
+          (->> (line-seq rdr)
+               (map #(clojure.string/split % #":" 2))
+               (map (fn [[category class-name]]
+                      {(keyword "batch-component" category) class-name}))
+               (reduce #(merge-with conj %1 %2)
+                       {:batch-component/batchlet []
+                        :batch-component/item-reader []
+                        :batch-component/item-writer []
+                        :batch-component/item-processor []
+                        :batch-component/throwable []})))))))
 
 (defn- find-batch-component [datomic app-name]
   (d/query datomic
