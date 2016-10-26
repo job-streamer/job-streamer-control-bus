@@ -89,7 +89,7 @@
                 (d/transact datomic
                             [{:db/id old-id
                               :calendar/name (:calendar/name cal)
-                              :calendar/holidays (:calendar/holidays cal)
+                              :calendar/holidays (:calendar/holidays cal [])
                               :calendar/weekly-holiday (pr-str (:calendar/weekly-holiday cal))}])
                 (do
                   (scheduler/add-calendar scheduler cal)
