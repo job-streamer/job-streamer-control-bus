@@ -63,7 +63,7 @@
     (testing "create calendars"
       (let [request {:request-method :post
                      :content-type "application/edn"
-                     :body (pr-str {:calendar/name "cal1"
+                     :body (pr-str {:calendar/name "cal"
                                     :calendar/weekly-holiday [true false false false false false true]
                                     :calendar/holidays []})}]
         (is (= 201 (-> (handler request) :status)))))
@@ -71,7 +71,41 @@
       (let [request {:request-method :get}
             res (-> (handler request) :body edn/read-string)]
         (is (= 1 (count res)))
-        (is (= "cal1" (-> res first :calendar/name)))))))
+        (is (= "cal" (-> res first :calendar/name)))))))
+
+(deftest download-list-resource
+  (let [system (new-system config)
+        handler (-> (-> (calendar/list-resource (:calendar system) :download? true)))]
+    (testing "export a calendar"
+      (let [request {:request-method :post
+                     :content-type "application/edn"
+                     :body (pr-str {:calendar/name "cal1"
+                                    :calendar/weekly-holiday [true false false false false false true]
+                                    :calendar/holidays [(.toDate (f/parse (:date f/formatters) "2016-09-01"))]})}]
+        (is (= 201 (-> ((-> (calendar/list-resource (:calendar system))) request) :status))))
+      (let [request {:request-method :get}
+            response (handler request)]
+        (is (= "cal1" (-> response :body read-string first :calendar/name)))
+        (is (= "application/force-download"  ((:headers response) "Content-Type")))
+        (is (= "attachment; filename=\"cals.edn\""  ((:headers response) "Content-disposition")))))
+    (testing "before export and after import are same"
+      (let [request {:request-method :post
+                     :content-type "application/edn"
+                     :body (pr-str {:calendar/name "cal2"
+                                    :calendar/weekly-holiday [true false false false false false true]
+                                    :calendar/holidays []})}]
+        (is (= 201 (-> ((-> (calendar/list-resource (:calendar system))) request) :status))))
+      (let [request {:request-method :get}
+            before-response (handler request)
+            delete-request{:request-method :delete}]
+        ((-> (calendar/entry-resource (:calendar system) "cal1")) delete-request)
+        ((-> (calendar/entry-resource (:calendar system) "cal2")) delete-request)
+        (for [cal (:body before-response)]
+          ((-> (calendar/list-resource (:calendar system)))
+           {:request-method :post
+            :content-type "application/edn"
+            :body cal}))
+        (is before-response (handler request))))))
 
 
 (deftest parse-sort-order
