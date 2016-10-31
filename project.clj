@@ -8,7 +8,7 @@
                  [org.clojure/core.async "0.2.374"]
                  [javax/javaee-api "7.0"]
                  [environ "1.0.3"]
-                 [bouncer "1.0.0" :exclusions [og.clojure/clojurescript]]
+                 [bouncer "1.0.0" :exclusions [org.clojure/clojurescript]]
                  [net.unit8.wscl/websocket-classloader "0.2.1"]
                  [net.unit8.logback/logback-websocket-appender "0.1.0"]
                  [io.undertow/undertow-websockets-jsr "1.3.22.Final"]
@@ -39,6 +39,7 @@
   :prep-tasks [["javac"] ["compile"]]
 
   :plugins [[lein-ring "0.9.7"]
+            [lein-junit "1.1.8"]
             [lein-libdir "0.1.1"]]
   :libdir-path "lib"
   :main ^:skip-aot job-streamer.control-bus.main
@@ -62,9 +63,12 @@
                                   [eftest "0.1.1"]
                                   [kerodon "0.8.0"]]
                    :source-paths ["dev"]
+                   :resource-paths ["dev-resources"]
                    :repl-options {:init-ns user}
                    :env {:port "45102"}}
    :project/test {:dependencies [[junit "4.12"]
-                                [org.mockito/mockito-all "1.10.19"]
-                                [org.powermock/powermock-api-mockito "1.6.4"]
-                                [org.powermock/powermock-module-junit4 "1.6.4"]]}})
+                                 [org.mockito/mockito-all "1.10.19"]
+                                 [org.powermock/powermock-api-mockito "1.6.4"]
+                                 [org.powermock/powermock-module-junit4 "1.6.4"]]
+                  :test-paths ["test/clj" "test/java"]
+                  :resource-paths ["dev-resources"]}})
