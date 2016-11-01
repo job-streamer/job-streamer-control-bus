@@ -7,7 +7,6 @@
 (def notification-server (get env :notificator-url "http://localhost:2121"))
 
 (defn send [type message]
-  (println "###############################")
   (http/post (str notification-server "/" type)
              {:headers {"content-type" "application/edn"}
               :body (pr-str message)}))
