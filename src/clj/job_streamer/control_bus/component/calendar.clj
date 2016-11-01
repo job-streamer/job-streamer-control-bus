@@ -87,7 +87,8 @@
                         [{:db/id (or (:cal-id ctx) (d/tempid :db.part/user))
                           :calendar/name (:calendar/name cal)
                           :calendar/holidays (:calendar/holidays cal [])
-                          :calendar/weekly-holiday (pr-str (:calendar/weekly-holiday cal))}])
+                          :calendar/weekly-holiday (pr-str (:calendar/weekly-holiday cal))
+                          :calendar/day-start (:calendar/day-start cal)}])
             (when-not (:cal-id ctx)
               (scheduler/add-calendar scheduler cal)))
 
@@ -131,7 +132,8 @@
                        [{:db/id (:db/id cal)
                          :calendar/name (:calendar/name cal)
                          :calendar/holidays (:calendar/holidays cal)
-                         :calendar/weekly-holiday (pr-str (:calendar/weekly-holiday cal))}]))
+                         :calendar/weekly-holiday (pr-str (:calendar/weekly-holiday cal))
+                         :calendar/day-start (:calendar/day-start cal)}]))
    :delete! (fn [ctx]
               (scheduler/delete-calendar scheduler name)
               (d/transact datomic
