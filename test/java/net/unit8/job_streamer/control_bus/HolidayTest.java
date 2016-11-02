@@ -1,15 +1,27 @@
 package net.unit8.job_streamer.control_bus;
 
-import org.junit.Assert;
-import org.junit.Test;
-import org.quartz.*;
-import org.quartz.impl.StdSchedulerFactory;
-import org.quartz.spi.OperableTrigger;
-
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
+
+import org.junit.Assert;
+import org.junit.Test;
+import org.quartz.DailyTimeIntervalScheduleBuilder;
+import org.quartz.DailyTimeIntervalTrigger;
+import org.quartz.Job;
+import org.quartz.JobBuilder;
+import org.quartz.JobDetail;
+import org.quartz.JobExecutionContext;
+import org.quartz.JobExecutionException;
+import org.quartz.Scheduler;
+import org.quartz.SchedulerException;
+import org.quartz.SchedulerFactory;
+import org.quartz.TimeOfDay;
+import org.quartz.TriggerBuilder;
+import org.quartz.TriggerUtils;
+import org.quartz.impl.StdSchedulerFactory;
+import org.quartz.spi.OperableTrigger;
 
 /**
  * @kawasima
@@ -35,7 +47,7 @@ public class HolidayTest {
                                 .dailyTimeIntervalSchedule()
                                 .withIntervalInHours(24)
                                 .startingDailyAt(TimeOfDay.hourAndMinuteOfDay(0, 0))
-                                .onMondayThroughFriday())
+                                .onEveryDay())
                 .startAt(startAt)
                 .modifiedByCalendar("holidays")
                 .build();
@@ -60,13 +72,23 @@ public class HolidayTest {
 
         }
     }
-
+    
     @Test
     public void fireWeekday() throws ParseException, SchedulerException {
         HolidayAndWeeklyCalendar holidayCalendar = new HolidayAndWeeklyCalendar();
 
         List<Date> fireDays = fireJobWithCalendar(sdf.parse("20150715"), holidayCalendar);
         Assert.assertArrayEquals(new Date[]{sdf.parse("20150715"), sdf.parse("20150716"), sdf.parse("20150717"), sdf.parse("20150720"), sdf.parse("20150721")}, fireDays.toArray());
+    }
+    
+    @Test
+    public void fireWeekdayWithDayStart() throws ParseException, SchedulerException {
+        HolidayAndWeeklyCalendar holidayCalendar = new HolidayAndWeeklyCalendar();
+        // Bussiness date start at 2 O'clock.      
+        holidayCalendar.setDayStart(7200000L);
+        
+        List<Date> fireDays = fireJobWithCalendar(sdf.parse("20150715"), holidayCalendar);
+        Assert.assertArrayEquals(new Date[]{sdf.parse("20150715"), sdf.parse("20150716"), sdf.parse("20150717"), sdf.parse("20150718"), sdf.parse("20150721")}, fireDays.toArray());
     }
 
     @Test
