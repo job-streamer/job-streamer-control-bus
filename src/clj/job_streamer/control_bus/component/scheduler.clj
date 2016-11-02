@@ -127,6 +127,7 @@
     (doseq [holiday (:calendar/holidays calendar)]
       (.addExcludedDate holiday-calendar holiday))
     (.setDaysExcluded holiday-calendar (boolean-array (:calendar/weekly-holiday calendar)))
+    (.setDayStart holiday-calendar (:calendar/day-start calendar 0))
     (.addCalendar scheduler (:calendar/name calendar) holiday-calendar false false)))
 
 (defn delete-calendar[{:keys [scheduler]} calendar-name]

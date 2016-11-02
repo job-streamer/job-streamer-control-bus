@@ -24,7 +24,7 @@ public class HolidayAndWeeklyCalendar extends BaseCalendar implements Calendar, 
         // excludes the time/date, continue evaluating this calendar instance.
         if (!super.isTimeIncluded(timeStamp)) { return false; }
 
-        java.util.Calendar cl = createJavaCalendar(timeStamp);
+        java.util.Calendar cl = createJavaCalendar(timeStamp - dayStart);
         int wday = cl.get(java.util.Calendar.DAY_OF_WEEK);
         Date lookFor = getStartOfDayJavaCalendar(timeStamp - dayStart).getTime();
 
@@ -115,9 +115,9 @@ public class HolidayAndWeeklyCalendar extends BaseCalendar implements Calendar, 
     public SortedSet<Date> getExcludedDates() {
         return Collections.unmodifiableSortedSet(dates);
     }
-    
-    public void setDayStart(LocalTime dt){
-        this.dayStart = dt;
+
+    public void setDayStart(Long dayStart){
+        this.dayStart = dayStart;
     }
 
 }
