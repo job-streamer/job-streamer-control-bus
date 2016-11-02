@@ -16,19 +16,17 @@ import org.quartz.impl.calendar.BaseCalendar;
 public class HolidayAndWeeklyCalendar extends BaseCalendar implements Calendar, Serializable {
     private boolean[] excludeDays = new boolean[]{true, false, false, false, false, false, true};
     private TreeSet<Date> dates = new TreeSet<Date>();
-    private LocalTime dayStart = new LocalTime(0,0);
+    private Long dayStart = 0L;
 
     @Override
     public boolean isTimeIncluded(long timeStamp) {
         // Test the base calendar first. Only if the base calendar not already
         // excludes the time/date, continue evaluating this calendar instance.
         if (!super.isTimeIncluded(timeStamp)) { return false; }
-        System.out.println("###################################");
-        System.out.println(timeStamp);
 
         java.util.Calendar cl = createJavaCalendar(timeStamp);
         int wday = cl.get(java.util.Calendar.DAY_OF_WEEK);
-        Date lookFor = getStartOfDayJavaCalendar(timeStamp).getTime();
+        Date lookFor = getStartOfDayJavaCalendar(timeStamp - dayStart).getTime();
 
         return !(excludeDays[wday - 1]) && !(dates.contains(lookFor));
     }
@@ -58,7 +56,7 @@ public class HolidayAndWeeklyCalendar extends BaseCalendar implements Calendar, 
         }
 
         // Get timestamp for 00:00:00
-        java.util.Calendar cl = getStartOfDayJavaCalendar(timeStamp);
+        java.util.Calendar cl = getStartOfDayJavaCalendar(timeStamp - dayStart);
         int wday = cl.get(java.util.Calendar.DAY_OF_WEEK);
 
         if (!excludeDays[wday - 1]) {
