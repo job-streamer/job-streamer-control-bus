@@ -4,6 +4,7 @@
             [com.stuartsierra.component :as component]
             [liberator.core :as liberator]
             [liberator.representation :refer [ring-response]]
+            [clojure.string :as str]
             (job-streamer.control-bus [util :refer [parse-body]])
             (job-streamer.control-bus.component [datomic :as d]))
   (:import [net.unit8.job_streamer.control_bus JobStreamerExecuteJob TimeKeeperJob HolidayAndWeeklyCalendar]
@@ -122,12 +123,32 @@
 (defn validate-format [cron-notation]
   (CronExpression/validateExpression cron-notation))
 
+(defn hh:MM? [hh:MM-string]
+  (if (and (some? hh:MM-string ) (re-find #"^\d{2}:\d{2}$" hh:MM-string))
+    (let [hhMM-string (str/replace hh:MM-string ":" "")
+          hhMM (Long/parseLong hhMM-string)
+          hh (quot  hhMM 100)
+          MM (mod hhMM 100)]
+      (if (or (< hh 0) (>= hh 24) (< MM 0) (>= MM 60))
+        false
+        true))
+    false))
+
+(defn to-ms-from-hh:MM [hh:MM-string]
+  (if-not (hh:MM? hh:MM-string)
+    0
+    (let [hhMM-string (str/replace hh:MM-string ":" "")
+          hhMM (Long/parseLong hhMM-string)
+          hh (quot  hhMM 100)
+          MM (mod hhMM 100)]
+      (* (+ (* hh 60) MM) 60000))))
+
 (defn add-calendar [{:keys [scheduler]} calendar]
   (let [holiday-calendar (HolidayAndWeeklyCalendar.)]
     (doseq [holiday (:calendar/holidays calendar)]
       (.addExcludedDate holiday-calendar holiday))
     (.setDaysExcluded holiday-calendar (boolean-array (:calendar/weekly-holiday calendar)))
-    (.setDayStart holiday-calendar (:calendar/day-start calendar 0))
+    (.setDayStart holiday-calendar (to-ms-from-hh:MM (:calendar/day-start calendar)))
     (.addCalendar scheduler (:calendar/name calendar) holiday-calendar false false)))
 
 (defn delete-calendar[{:keys [scheduler]} calendar-name]

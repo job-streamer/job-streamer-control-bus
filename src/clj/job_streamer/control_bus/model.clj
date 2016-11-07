@@ -97,4 +97,4 @@
             [name :string :unique-value :indexed]
             [weekly-holiday :string]
             [holidays :instant :many]
-            [day-start :long]))])
+            [day-start :string]))])

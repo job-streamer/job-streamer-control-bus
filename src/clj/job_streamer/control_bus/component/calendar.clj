@@ -75,7 +75,8 @@
    :available-media-types ["application/edn" "application/json"]
    :allowed-methods [:get :post]
    :malformed? #(validate (parse-body %)
-                          :calendar/name v/required)
+                          :calendar/name v/required
+                          :calendar/day-start [[(fn [val] (or (empty? val) (scheduler/hh:MM? val)))  :message "Invalid hh:MM format"]])
    :exists? (fn [{{cal-name :calendar/name} :edn :as ctx}]
               (if (#{:post} (get-in ctx [:request :request-method]))
                 (when-let [id (find-calendar-by-name component cal-name)]
@@ -88,7 +89,7 @@
                           :calendar/name (:calendar/name cal)
                           :calendar/holidays (:calendar/holidays cal [])
                           :calendar/weekly-holiday (pr-str (:calendar/weekly-holiday cal))
-                          :calendar/day-start (:calendar/day-start cal 0)}])
+                          :calendar/day-start (:calendar/day-start cal "00:00")}])
             (when-not (:cal-id ctx)
               (scheduler/add-calendar scheduler cal)))
 
@@ -117,7 +118,8 @@
    :allowed-methods [:get :put :delete]
    :malformed? (fn [ctx]
                  (or (validate (parse-body ctx)
-                               :calendar/name v/required)
+                               :calendar/name v/required
+                               :calendar/day-start [[(fn [val] (or (empty? val) (scheduler/hh:MM? val)))  :message "Invalid hh:MM format"]])
                      (and (#{:delete} (get-in ctx [:request :request-method]))
                           (when (calendar-is-already-used-by-job? datomic name)
                             {:message {:messages ["This calendar is already used by some job."]}}))))
@@ -133,7 +135,7 @@
                          :calendar/name (:calendar/name cal)
                          :calendar/holidays (:calendar/holidays cal)
                          :calendar/weekly-holiday (pr-str (:calendar/weekly-holiday cal))
-                         :calendar/day-start (:calendar/day-start cal 0)}]))
+                         :calendar/day-start (:calendar/day-start cal "00:00")}]))
    :delete! (fn [ctx]
               (scheduler/delete-calendar scheduler name)
               (d/transact datomic
@@ -147,7 +149,6 @@
    :handle-malformed (fn[ctx]
                        (ring-response {:status 400
                                        :body (pr-str (:message ctx))}))))
-
 
 (defrecord Calendar []
   component/Lifecycle
