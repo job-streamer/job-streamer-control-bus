@@ -124,21 +124,18 @@
   (CronExpression/validateExpression cron-notation))
 
 (defn hh:MM? [hh:MM-string]
-  (if (and (some? hh:MM-string ) (re-find #"^\d{2}:\d{2}$" hh:MM-string))
-    (let [hhMM-string (str/replace hh:MM-string ":" "")
-          hhMM (Long/parseLong hhMM-string)
-          hh (quot  hhMM 100)
-          MM (mod hhMM 100)]
-      (if (or (< hh 0) (>= hh 24) (< MM 0) (>= MM 60))
-        false
-        true))
-    false))
+  (and (some? hh:MM-string )
+       (re-find #"^\d{2}:\d{2}$" hh:MM-string)
+       (let [hhMM (-> hh:MM-string (str/replace ":" "") Long/parseLong)
+             hh (quot  hhMM 100)
+             MM (mod hhMM 100)]
+         ;range
+         (and (<= 0 hh 23)  (<= 0 MM 59)))))
 
 (defn to-ms-from-hh:MM [hh:MM-string]
   (if-not (hh:MM? hh:MM-string)
     0
-    (let [hhMM-string (str/replace hh:MM-string ":" "")
-          hhMM (Long/parseLong hhMM-string)
+    (let [hhMM (-> hh:MM-string (str/replace ":" "") Long/parseLong)
           hh (quot  hhMM 100)
           MM (mod hhMM 100)]
       (* (+ (* hh 60) MM) 60000))))

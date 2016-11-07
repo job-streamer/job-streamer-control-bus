@@ -7,7 +7,8 @@
   (testing "nil"
     (is (not (scheduler/hh:MM? nil))))
   (testing "valid"
-    (is (scheduler/hh:MM? "01:01")))
+    (is (scheduler/hh:MM? "00:00"))
+    (is (scheduler/hh:MM? "23:59")))
   (testing "invalid-hour"
     (is (not (scheduler/hh:MM? "-01:01")))
     (is (not (scheduler/hh:MM? "24:01"))))
