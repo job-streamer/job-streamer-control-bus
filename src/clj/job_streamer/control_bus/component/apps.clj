@@ -1,6 +1,7 @@
 (ns job-streamer.control-bus.component.apps
   (:require [clojure.tools.logging :as log]
             [clojure.java.io :as io]
+            [clojure.string :refer [ends-with?]]
             [com.stuartsierra.component :as component]
             [liberator.core :as liberator]
             [bouncer.validators :as v]
@@ -105,10 +106,49 @@
    :handle-ok (fn [ctx]
                 (vals @applications))))
 
-(defn batch-components-resource [{:keys [datomic]} app-name]
+(defn batch-components-resource [{:keys [datomic applications]} app-name]
   (liberator/resource
    :available-media-types ["application/edn" "application/json"]
-   :allowed-methods [:get]
+   :allowed-methods [:get :post]
+   :malformed? #(let [{:keys [request-method params]} (:request %)]
+                  ;; Check the extension of the posted file.
+                  (and (= request-method :post)
+                       (some-> params
+                               (get-in ["file" :filename])
+                               (ends-with? ".jar")
+                               not)))
+   :post! (fn [ctx]
+            (let [{:keys [filename tempfile size]} (get-in ctx [:request :params "file"])
+                  jar-file (io/file "batch-components" app-name filename)
+                  classpaths [(.toString (io/as-url jar-file))]
+                  description "Uploaded by the console."]
+              (log/infof "Jar file is being uploaded [%s, %d bytes]" filename size)
+              (io/make-parents jar-file)
+              (io/copy tempfile jar-file)
+              (if-let [app-id (d/query datomic
+                                     '[:find ?e .
+                                       :in $ ?n
+                                       :where [?e :application/name ?n]]
+                                     app-name)]
+                (d/transact datomic
+                            [{:db/id app-id
+                              :application/description description
+                              :application/classpaths classpaths}])
+                (d/transact datomic
+                            [{:db/id #db/id[db.part/user -1]
+                              :application/name app-name
+                              :application/description description
+                              :application/classpaths classpaths}]))
+              (register-app applications {:application/name app-name
+                                          :application/classpaths classpaths
+                                          :application/description description})
+              (when-let [components (scan-components classpaths)]
+                (let [batch-component-id (find-batch-component datomic app-name)]
+                  (d/transact datomic
+                              [(merge {:db/id (or batch-component-id
+                                                  (d/tempid :db.part/user))
+                                       :batch-component/application [:application/name app-name]}
+                                      components)])))))
    :handle-ok (fn [ctx]
                 (let [in-app (->> (d/query datomic
                                            '{:find [?c .]
