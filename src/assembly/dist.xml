@@ -22,8 +22,8 @@
       <outputDirectory>dist</outputDirectory>
     </file>
     <file>
-      <source>resouces/logback.xml</source>
-      <outputDirectory>resouces</outputDirectory>
+      <source>resources/logback.xml</source>
+      <outputDirectory>resources</outputDirectory>
     </file>
   </files>
   <dependencySets>
