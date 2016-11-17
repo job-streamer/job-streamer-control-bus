@@ -151,6 +151,13 @@
                     on-success (on-success (edn/read-string body))))))
 
 (defn update-execution-by-id [{:keys [agents datomic]} id & {:keys [on-error on-success]}]
+  (println "##############################3")
+  (println agents)
+  (println datomic)
+  (println id)
+  (println on-error)
+  (println on-success)
+
   (let [job-execution (d/pull datomic
                               '[:job-execution/execution-id
                                 {:job-execution/agent [:agent/instance-id]}]
