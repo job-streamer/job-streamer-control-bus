@@ -21,6 +21,10 @@
       <source>target/${project.build.finalName}.jar</source>
       <outputDirectory>dist</outputDirectory>
     </file>
+    <file>
+      <source>resouces/logback.xml</source>
+      <outputDirectory>resouces</outputDirectory>
+    </file>
   </files>
   <dependencySets>
     <dependencySet>
