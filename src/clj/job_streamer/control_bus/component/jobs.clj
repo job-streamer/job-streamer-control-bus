@@ -334,7 +334,7 @@
     (->> (:job/status-notifications job)
          (filter #(or (= (get-in % [:status-notification/batch-status :db/ident])
                          (:batch-status execution))
-                      (= (:status-notification/exit-status %) (:exit-status execution))))
+                      (and (:exit-status execution) (= (:status-notification/exit-status %) (:exit-status execution)))))
          (map #(notification/send (:status-notification/type %)
                                   (assoc execution :job-name (:job/name job))))
          doall))
