@@ -71,6 +71,18 @@
       (let [request {:request-method :get}
             res (-> (handler request) :body edn/read-string)]
         (is (= 1 (count res)))
+        (is (= "cal" (-> res first :calendar/name)))))
+    (testing "calendar can cleate if name contains emoji"
+      (let [request {:request-method :post
+                     :content-type "application/edn"
+                     :body (pr-str {:calendar/name "⏰"
+                                    :calendar/weekly-holiday [true false false false false false true]
+                                    :calendar/holidays []})}]
+        (is (= 201 (-> (handler request) :status)))))
+    (testing "get two calendar"
+      (let [request {:request-method :get}
+            res (-> (handler request) :body edn/read-string)]
+        (is (= 2 (count res)))
         (is (= "cal" (-> res first :calendar/name)))))))
 
 (deftest download-list-resource
@@ -86,7 +98,7 @@
       (let [request {:request-method :get}
             response (handler request)]
         (is (= "cal1" (-> response :body read-string first :calendar/name)))
-        (is (= "application/force-download"  ((:headers response) "Content-Type")))
+        (is (= "application/force-download; charset=utf-8"  ((:headers response) "Content-Type")))
         (is (= "attachment; filename=\"cals.edn\""  ((:headers response) "Content-disposition")))))
     (testing "before export and after import are same"
       (let [request {:request-method :post

@@ -6,7 +6,7 @@
             [bouncer.validators :as v]
             [clojure.string :as str]
             [com.stuartsierra.component :as component]
-            [ring.util.response :refer [response content-type header]]
+            [ring.util.response :refer [response content-type header charset]]
             (job-streamer.control-bus [validation :refer (validate)]
                                       [util :refer [parse-body]])
             (job-streamer.control-bus.component [datomic :as d]
@@ -106,6 +106,7 @@
                         pr-str
                         response
                         (content-type "application/force-download")
+                        (charset "utf-8")
                         (header "Content-disposition" "attachment; filename=\"cals.edn\"")
                         (ring-response))
                     res)))))
