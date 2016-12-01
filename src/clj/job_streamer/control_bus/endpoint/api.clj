@@ -3,7 +3,7 @@
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.tools.logging :as log]
-            [compojure.core :refer [ANY GET routes]]
+            [compojure.core :refer [ANY GET POST routes]]
             [bouncer.validators :as v]
             [ring.util.response :refer [content-type]]
             (job-streamer.control-bus.component
@@ -11,15 +11,19 @@
              [jobs :as jobs]
              [agents :refer [find-agent available-agents] :as ag]
              [scheduler :as scheduler]
-             [calendar :as calendar])
+             [calendar :as calendar]
+             [auth :as auth])
             (job-streamer.control-bus
              [model :as model]
              [notification :as notification]
              [validation :refer [validate]]
              [util :refer [parse-body]])))
 
-(defn api-endpoint [{:keys [jobs agents calendar scheduler apps]}]
+(defn api-endpoint [{:keys [jobs agents calendar scheduler apps auth]}]
   (routes
+   (POST "/login" [] (auth/auth-resource auth))
+
+   ;; Job
    (ANY "/:app-name/jobs" [app-name]
      (jobs/list-resource jobs app-name))
    (ANY "/:app-name/jobs/download" [app-name]

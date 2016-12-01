@@ -30,7 +30,8 @@
                  [org.quartz-scheduler/quartz "2.2.3"]
 
                  ;; for monitoring agents
-                 [org.rrd4j/rrd4j "2.2.1"]]
+                 [org.rrd4j/rrd4j "2.2.1"]
+                 [buddy "1.2.0"]]
 
   :source-paths ["src/clj"]
   :test-paths   ["test/clj"]

@@ -19,10 +19,19 @@
              [recoverer :refer [recoverer-component]]
              [datomic    :refer [datomic-component]]
              [migration  :refer [migration-component]]
-             [socketapp  :refer [socketapp-component]])
+             [socketapp  :refer [socketapp-component]]
+             [token      :refer [token-provider-component] :as token]
+             [auth       :refer [auth-component]])
             (job-streamer.control-bus.endpoint
              [api :refer [api-endpoint]])
-            [job-streamer.control-bus.endpoint.api :refer [api-endpoint]]))
+            [job-streamer.control-bus.endpoint.api :refer [api-endpoint]]
+            [clojure.tools.logging :as log]
+            [buddy.auth :refer [authenticated?]]
+            [buddy.auth.backends.session :refer [session-backend]]
+            [buddy.auth.backends.token :refer [token-backend]]
+            [buddy.auth.middleware :refer [wrap-authentication wrap-authorization]]
+            [buddy.auth.accessrules :refer [wrap-access-rules]]
+            [buddy.auth.http :as http]))
 
 (defn wrap-same-origin-policy [handler alias]
   (fn [req]
@@ -35,14 +44,39 @@
       (when-let [resp (handler req)]
         (header resp "Access-Control-Allow-Origin" "*")))))
 
+(def access-rules [{:pattern #"^/(?!login).*$"
+                    :handler authenticated?}])
+
+(defn token-base [token-provider]
+  (token-backend
+   {:authfn
+    (fn [req token]
+      (try
+        (let [user (token/auth-by token-provider token)]
+          (log/info "token authentication token=" token ", user=" user)
+          user)
+        (catch Exception e
+          (log/error "auth-by error" e))))}))
+
+(defn wrap-authn [handler token-provider & backends]
+  (apply wrap-authentication handler (conj backends (token-base token-provider))))
+
 (def base-config
   {:app {:middleware [[wrap-not-found :not-found]
                       [wrap-same-origin-policy :same-origin]
                       [wrap-multipart-params]
+                      [wrap-access-rules   :access-rules]
+                      [wrap-authorization  :authorization]
+                      [wrap-authn          :token :session-base]
                       [wrap-defaults :defaults]]
-
+         :access-rules {:rules access-rules :policy :allow}
+         :session-base (session-backend)
+         :authorization (fn [req meta]
+                          (if (authenticated? req)
+                            (http/response "Permission denied" 403)
+                            (http/response "Unauthorized" 401)))
          :not-found  "Resource Not Found"
-         :defaults  (meta-merge api-defaults {})}})
+         :defaults  (meta-merge api-defaults {:session true})}})
 
 
 (defn new-system [config]
@@ -61,11 +95,13 @@
          :apps       (apps-component       (:apps       config))
          :jobs       (jobs-component       (:jobs       config))
          :agents     (agents-component     (:agents     config))
-         :calendar   (calendar-component   (:calendar   config)))
+         :calendar   (calendar-component   (:calendar   config))
+         :token      (token-provider-component (:token config))
+         :auth       (auth-component (:auth config)))
         (component/system-using
          {:http      [:app :socketapp]
-          :app       [:api]
-          :api       [:apps :calendar :agents :jobs :scheduler]
+          :app       [:api :token]
+          :api       [:apps :calendar :agents :jobs :scheduler :auth]
           :socketapp [:datomic :jobs :agents]
           :jobs      [:datomic :scheduler :agents]
           :agents    [:datomic]
@@ -74,4 +110,5 @@
           :scheduler [:datomic]
           :migration [:datomic]
           :recoverer [:datomic :jobs :agents]
-          :dispatcher [:datomic :apps :jobs :agents]}))))
+          :dispatcher [:datomic :apps :jobs :agents]
+          :auth      [:token]}))))
