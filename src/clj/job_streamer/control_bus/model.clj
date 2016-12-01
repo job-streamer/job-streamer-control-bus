@@ -7,7 +7,22 @@
             [name :string :indexed :unique-value :fulltext]
             [description :string]
             [classpaths :string :many]
-            [jobs :ref :many]))
+            [jobs :ref :many]
+            [members :ref :many]))
+   (schema member
+           (fields
+             [user :ref]
+             [rolls :ref :many]))
+   (schema user
+           (fields
+             [id :string :indexed :unique-value]
+             [password :string]
+             [salt :bytes]
+             [token :string]))
+   (schema roll
+           (fields
+             [name :string :indexed :unique-value]
+             [permissions :ref :many]))
    (schema batch-component
            (fields
             [application :ref]
