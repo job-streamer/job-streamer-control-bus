@@ -39,10 +39,13 @@
       ;;Pre-flight request
       {:status 200
        :headers {"Access-Control-Allow-Methods" "POST,GET,PUT,DELETE,OPTIONS"
-                 "Access-Control-Allow-Origin" "*"
-                 "Access-Control-Allow-Headers" "Content-Type"}}
+                 "Access-Control-Allow-Origin" "http://localhost:3000"
+                 "Access-Control-Allow-Headers" "Content-Type"
+                 "Access-Control-Allow-Credentials" "true"}}
       (when-let [resp (handler req)]
-        (header resp "Access-Control-Allow-Origin" "*")))))
+        (-> resp
+            (header "Access-Control-Allow-Origin" "http://localhost:3000")
+            (header "Access-Control-Allow-Credentials" "true"))))))
 
 (def access-rules [{:pattern #"^/(?!login).*$"
                     :handler authenticated?}])
@@ -63,11 +66,11 @@
 
 (def base-config
   {:app {:middleware [[wrap-not-found :not-found]
-                      [wrap-same-origin-policy :same-origin]
-                      [wrap-multipart-params]
                       [wrap-access-rules   :access-rules]
                       [wrap-authorization  :authorization]
                       [wrap-authn          :token :session-base]
+                      [wrap-same-origin-policy :same-origin]
+                      [wrap-multipart-params]
                       [wrap-defaults :defaults]]
          :access-rules {:rules access-rules :policy :allow}
          :session-base (session-backend)

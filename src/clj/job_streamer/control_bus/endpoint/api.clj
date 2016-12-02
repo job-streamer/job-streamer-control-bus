@@ -21,7 +21,7 @@
 
 (defn api-endpoint [{:keys [jobs agents calendar scheduler apps auth]}]
   (routes
-   (POST "/login" [] (auth/auth-resource auth))
+   (POST "/login" req (auth/login auth req))
 
    ;; Job
    (ANY "/:app-name/jobs" [app-name]

@@ -10,7 +10,7 @@
             [clojure.string :as str]
             [clj-time.format :as f]
             [liberator.representation :refer [ring-response]]
-            [ring.util.response :refer [response content-type header]]
+            [ring.util.response :refer [response content-type header redirect]]
             (job-streamer.control-bus [notification :as notification]
                                       [validation :refer [validate]]
                                       [util :refer [parse-body edn->datoms to-int]])
@@ -20,19 +20,12 @@
 
 (defn- auth-by-password [datomic username password])
 
-(defn auth-resource [{:keys [datomic token]}]
-  (liberator/resource
-    :available-media-types ["application/edn" "application/json"]
-    :allowed-methods [:post]
-    :post! (fn [ctx]
-             (println "!!!" ctx)
-             (let [user {:name "admin" :password "admin"}
-                   access-token (token/new-token token user)]
-               {::post-response (merge user
-                                       {:token-type "bearer"
-                                        :access-token access-token})}))
-    :handle-created (fn [ctx]
-                      (::post-response ctx))))
+(defn login [{:keys [datomic token]} req]
+  (let [{{:keys [username password next]} :params} req
+        user {:name "admin" :email "admin@admin.com" :password "admin"}
+        access-token (token/new-token token user)]
+    (-> (redirect next)
+        (assoc-in [:session :identity] (select-keys user [:name :email])))))
 
 (defrecord Auth []
   component/Lifecycle
