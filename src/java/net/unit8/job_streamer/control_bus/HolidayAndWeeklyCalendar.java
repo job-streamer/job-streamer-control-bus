@@ -1,10 +1,14 @@
 package net.unit8.job_streamer.control_bus;
 
+import java.io.Serializable;
+import java.util.Collections;
+import java.util.Date;
+import java.util.SortedSet;
+import java.util.TreeSet;
+
+import org.joda.time.LocalTime;
 import org.quartz.Calendar;
 import org.quartz.impl.calendar.BaseCalendar;
-
-import java.io.Serializable;
-import java.util.*;
 
 /**
  * @author kawasima
@@ -12,6 +16,7 @@ import java.util.*;
 public class HolidayAndWeeklyCalendar extends BaseCalendar implements Calendar, Serializable {
     private boolean[] excludeDays = new boolean[]{true, false, false, false, false, false, true};
     private TreeSet<Date> dates = new TreeSet<Date>();
+    private Long dayStart = 0L;
 
     @Override
     public boolean isTimeIncluded(long timeStamp) {
@@ -19,9 +24,9 @@ public class HolidayAndWeeklyCalendar extends BaseCalendar implements Calendar, 
         // excludes the time/date, continue evaluating this calendar instance.
         if (!super.isTimeIncluded(timeStamp)) { return false; }
 
-        java.util.Calendar cl = createJavaCalendar(timeStamp);
+        java.util.Calendar cl = createJavaCalendar(timeStamp - dayStart);
         int wday = cl.get(java.util.Calendar.DAY_OF_WEEK);
-        Date lookFor = getStartOfDayJavaCalendar(timeStamp).getTime();
+        Date lookFor = getStartOfDayJavaCalendar(timeStamp - dayStart).getTime();
 
         return !(excludeDays[wday - 1]) && !(dates.contains(lookFor));
     }
@@ -51,7 +56,7 @@ public class HolidayAndWeeklyCalendar extends BaseCalendar implements Calendar, 
         }
 
         // Get timestamp for 00:00:00
-        java.util.Calendar cl = getStartOfDayJavaCalendar(timeStamp);
+        java.util.Calendar cl = getStartOfDayJavaCalendar(timeStamp - dayStart);
         int wday = cl.get(java.util.Calendar.DAY_OF_WEEK);
 
         if (!excludeDays[wday - 1]) {
@@ -109,6 +114,10 @@ public class HolidayAndWeeklyCalendar extends BaseCalendar implements Calendar, 
      */
     public SortedSet<Date> getExcludedDates() {
         return Collections.unmodifiableSortedSet(dates);
+    }
+
+    public void setDayStart(Long dayStart){
+        this.dayStart = dayStart;
     }
 
 }
