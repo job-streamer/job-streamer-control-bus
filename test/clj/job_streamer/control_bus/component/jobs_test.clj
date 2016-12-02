@@ -323,7 +323,6 @@
 
 (deftest save-execution
   (let [system (new-system config)]
-    (create-app system)
     ;; setup data
     ((-> (jobs/list-resource (:jobs system) "default")) {:request-method :post
               :content-type "application/edn"
