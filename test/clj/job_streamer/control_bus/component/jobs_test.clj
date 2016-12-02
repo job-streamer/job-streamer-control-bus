@@ -37,15 +37,6 @@
         :migration [:datomic]})
       (component/start-system)))
 
-(defn create-app [system]
-  (let [handler (-> (apps/list-resource (:apps system)))
-        request {:request-method :post
-                 :content-type "application/edn"
-                 :body (pr-str {:application/name "default"
-                                :application/description "default application"
-                                :application/classpaths []})}]
-    (handler request)))
-
 (defn setup-execution [{:keys [datomic] :as jobs}
                        {:keys [job-execution/start-time db/id job-execution/end-time
                                job-execution/create-time job-execution/batch-status]
@@ -77,7 +68,6 @@
 (deftest list-resource
   (let [system (new-system config)
         handler (-> (jobs/list-resource (:jobs system) "default"))]
-    (create-app system)
     (testing "no jobs"
       (let [request {:request-method :get}]
         (is (= 0 (-> (handler request) :body edn/read-string :hits)))))
@@ -98,7 +88,6 @@
 (deftest download-list-resource
   (let [system (new-system config)
         handler (-> (jobs/list-resource (:jobs system) "default" :download? true))]
-    (create-app system)
     (testing "no jobs"
       (let [request {:request-method :get}]
         (is (empty? (-> (handler request) :body read-string)))))
@@ -116,7 +105,6 @@
 (deftest find-all-with-query
   (let [system (new-system config)
         handler (-> (jobs/list-resource (:jobs system) "default"))]
-    (create-app system)
     ;; setup data
     (handler {:request-method :post
               :content-type "application/edn"
@@ -172,7 +160,6 @@
 (deftest find-all-with-sort
   (let [system (new-system config)
         handler (-> (jobs/list-resource (:jobs system) "default"))]
-    (create-app system)
     ;; setup data
     (handler {:request-method :post
               :content-type "application/edn"
