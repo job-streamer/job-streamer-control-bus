@@ -2,4 +2,4 @@
 
 version=$(cat `dirname $0`/../VERSION)
 
-java -cp dist/job-streamer-control-bus-${version}.jar:"lib/*" clojure.main -m job-streamer.control-bus.main
+java -cp $CONTROL_BUS_RESOURCE_PATH:resources:dist/job-streamer-control-bus-${version}.jar:"lib/*" clojure.main -m job-streamer.control-bus.main
