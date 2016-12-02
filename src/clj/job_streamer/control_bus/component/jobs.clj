@@ -1,5 +1,6 @@
 (ns job-streamer.control-bus.component.jobs
   (:require [clojure.tools.logging :as log]
+            [clojure.set :as set]
             [clj-time.core :as t]
             [clj-time.coerce :as c]
             [clojure.edn :as edn]
@@ -346,7 +347,17 @@
                       (when-let [start-time (:start-time execution)]
                         {:job-execution/start-time start-time})
                       (when-let [end-time (:end-time execution)]
-                        {:job-execution/end-time end-time}))]))
+                        {:job-execution/end-time end-time})
+                      (when-let [step-executions (and (empty?  (d/query datomic
+                                                                        '{:find [?step-executions]
+                                                                          :in [$]
+                                                                          :where [[?step-executions :job-execution/step-executions ?job-execution-id]]} id))
+                                                      (:step-executions execution))]
+                        {:job-execution/step-executions (map (fn [m]
+                                                               (->> m
+                                                                    (map #(vector (keyword "step-execution" (name (key %))) (val %)))
+                                                                    (into {:db/id #db/id[:db.part/user -1]})))
+                                                             step-executions)}))]))
 
 (defn save-status-notification
   "Save a given status notification."
@@ -519,7 +530,7 @@
 
 (defn job-settings-resource [{:keys [datomic] :as jobs} app-name job-name & [cmd]]
   (liberator/resource
-   :available-media-types ["application/edn" "application/json"]
+  :available-media-types ["application/edn" "application/json"]
   :allowed-methods [:get :delete :put]
   :malformed? #(parse-body %)
   :exists? (when-let [[app-id job-id] (find-by-name jobs app-name job-name)]
