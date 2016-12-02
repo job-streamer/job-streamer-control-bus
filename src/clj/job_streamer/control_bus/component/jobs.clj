@@ -670,6 +670,7 @@
               execution
               :on-success (fn [_]
                             (ag/update-execution-by-id
+                             agents
                              id
                              :on-success (fn [response]
                                            (save-execution jobs id response))
@@ -682,6 +683,7 @@
               execution
               :on-success (fn [_]
                             (ag/update-execution-by-id
+                             agents
                              id
                              :on-success (fn [response]
                                            (save-execution jobs id response)))))
