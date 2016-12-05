@@ -7,7 +7,8 @@
             [name :string :indexed :unique-value :fulltext]
             [description :string]
             [classpaths :string :many]
-            [jobs :ref :many]))
+            [jobs :ref :many]
+            [members :ref :many]))
    (schema batch-component
            (fields
             [application :ref]
@@ -26,8 +27,7 @@
             [exclusive? :boolean]
             [time-monitor :ref]
             [status-notifications :ref :many]
-            [executions :ref :many]
-            [members :ref :many]))
+            [executions :ref :many]))
    (schema time-monitor
            (fields
             [duration :long]
@@ -111,4 +111,4 @@
    (schema roll
            (fields
              [name :string :indexed :unique-value]
-             [permissions :ref :many]))])
+             [permissions :keyword :many]))])

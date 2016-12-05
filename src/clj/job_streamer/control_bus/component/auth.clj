@@ -76,6 +76,26 @@
   component/Lifecycle
 
   (start [component]
+
+         ;; create the initial permissions.
+         (->> [:permission/read-job
+               :permission/create-job
+               :permission/update-job
+               :permission/delete-job
+               :permission/execute-job]
+              (map
+                #(if-let [name (d/query datomic
+                                        '[:find ?e .
+                                          :in $ ?n
+                                          :where [?e :roll/name ?n]]
+                                        (name %))]
+                   nil
+                   (d/transact datomic
+                               [{:db/id #db/id[db.part/user -1]
+                                 :roll/name (name %)
+                                 :roll/permissions [%]}])))
+              doall)
+
          ;; create the initil user.
          (if-let [user-id (d/query datomic
                                    '[:find ?e .
