@@ -33,18 +33,18 @@
             [buddy.auth.accessrules :refer [wrap-access-rules]]
             [buddy.auth.http :as http]))
 
-(defn wrap-same-origin-policy [handler alias]
+(defn wrap-same-origin-policy [handler {:keys [alias access-control-allow-origin]}]
   (fn [req]
     (if (= (:request-method req) :options)
       ;;Pre-flight request
       {:status 200
        :headers {"Access-Control-Allow-Methods" "POST,GET,PUT,DELETE,OPTIONS"
-                 "Access-Control-Allow-Origin" "http://localhost:3000"
+                 "Access-Control-Allow-Origin" access-control-allow-origin
                  "Access-Control-Allow-Headers" "Content-Type"
                  "Access-Control-Allow-Credentials" "true"}}
       (when-let [resp (handler req)]
         (-> resp
-            (header "Access-Control-Allow-Origin" "http://localhost:3000")
+            (header "Access-Control-Allow-Origin" access-control-allow-origin)
             (header "Access-Control-Allow-Credentials" "true"))))))
 
 (def access-rules [{:pattern #"^/(?!login).*$"
@@ -114,4 +114,4 @@
           :migration [:datomic]
           :recoverer [:datomic :jobs :agents]
           :dispatcher [:datomic :apps :jobs :agents]
-          :auth      [:token]}))))
+          :auth      [:token :datomic]}))))

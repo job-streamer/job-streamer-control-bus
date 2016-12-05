@@ -64,7 +64,8 @@
                                   [kerodon "0.8.0"]]
                    :source-paths ["dev"]
                    :repl-options {:init-ns user}
-                   :env {:port "45102"}}
+                   :env {:port "45102"
+                         :access-control-allow-origin "http://localhost:3000"}}
    :project/test {:resource-paths ["test/resources"]
                   :dependencies [[junit "4.12"]
                                 [org.mockito/mockito-all "1.10.19"]

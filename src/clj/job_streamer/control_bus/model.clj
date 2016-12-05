@@ -26,7 +26,8 @@
             [exclusive? :boolean]
             [time-monitor :ref]
             [status-notifications :ref :many]
-            [executions :ref :many]))
+            [executions :ref :many]
+            [members :ref :many]))
    (schema time-monitor
            (fields
             [duration :long]
@@ -96,4 +97,18 @@
            (fields
             [name :string :unique-value :indexed]
             [weekly-holiday :string]
-            [holidays :instant :many]))])
+            [holidays :instant :many]))
+   (schema member
+           (fields
+             [user :ref]
+             [rolls :ref :many]))
+   (schema user
+           (fields
+             [id :string :indexed :unique-value]
+             [password :string]
+             [salt :bytes]
+             [token :string]))
+   (schema roll
+           (fields
+             [name :string :indexed :unique-value]
+             [permissions :ref :many]))])
