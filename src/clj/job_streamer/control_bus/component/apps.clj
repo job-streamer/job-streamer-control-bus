@@ -187,11 +187,17 @@
                          :in $ ?n
                          :where [?e :application/name ?n]]
                        "default")
-      (d/transact datomic
-                  [{:db/id #db/id[db.part/user -1]
-                    :application/name "default"
-                    :application/description "default application"
-                    :application/classpaths []}]))
+      (let [member-id (d/query datomic
+                               '{:find [?member .]
+                                 :in [$ ?n]
+                                 :where [[?member :member/user ?user]
+                                         [?user :user/id ?n]]} "admin")]
+        (d/transact datomic
+                    [{:db/id #db/id[db.part/user -1]
+                      :application/name "default"
+                      :application/description "default application"
+                      :application/classpaths []
+                      :application/members [{:db/id member-id}]}])))
     (let [applications (atom {})
           apps (d/query (:datomic component)
                         '{:find [[(pull ?app [*])]]

@@ -47,7 +47,7 @@
             (header "Access-Control-Allow-Origin" access-control-allow-origin)
             (header "Access-Control-Allow-Credentials" "true"))))))
 
-(def access-rules [{:pattern #"^/(?!login).*$"
+(def access-rules [{:pattern #"^/[^/]+/(?!login).*$"
                     :handler authenticated?}])
 
 (defn token-base [token-provider]
@@ -108,7 +108,7 @@
           :socketapp [:datomic :jobs :agents]
           :jobs      [:datomic :scheduler :agents]
           :agents    [:datomic]
-          :apps      [:datomic :agents]
+          :apps      [:datomic :agents :auth]
           :calendar  [:datomic :scheduler]
           :scheduler [:datomic]
           :migration [:datomic]
