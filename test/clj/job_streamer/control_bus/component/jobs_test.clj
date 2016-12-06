@@ -37,15 +37,6 @@
         :migration [:datomic]})
       (component/start-system)))
 
-(defn create-app [system]
-  (let [handler (-> (apps/list-resource (:apps system)))
-        request {:request-method :post
-                 :content-type "application/edn"
-                 :body (pr-str {:application/name "default"
-                                :application/description "default application"
-                                :application/classpaths []})}]
-    (handler request)))
-
 (defn setup-execution [{:keys [datomic] :as jobs}
                        {:keys [job-execution/start-time db/id job-execution/end-time
                                job-execution/create-time job-execution/batch-status]
@@ -77,7 +68,6 @@
 (deftest list-resource
   (let [system (new-system config)
         handler (-> (jobs/list-resource (:jobs system) "default"))]
-    (create-app system)
     (testing "no jobs"
       (let [request {:request-method :get}]
         (is (= 0 (-> (handler request) :body edn/read-string :hits)))))
@@ -98,7 +88,6 @@
 (deftest download-list-resource
   (let [system (new-system config)
         handler (-> (jobs/list-resource (:jobs system) "default" :download? true))]
-    (create-app system)
     (testing "no jobs"
       (let [request {:request-method :get}]
         (is (empty? (-> (handler request) :body read-string)))))
@@ -116,7 +105,6 @@
 (deftest find-all-with-query
   (let [system (new-system config)
         handler (-> (jobs/list-resource (:jobs system) "default"))]
-    (create-app system)
     ;; setup data
     (handler {:request-method :post
               :content-type "application/edn"
@@ -172,7 +160,6 @@
 (deftest find-all-with-sort
   (let [system (new-system config)
         handler (-> (jobs/list-resource (:jobs system) "default"))]
-    (create-app system)
     ;; setup data
     (handler {:request-method :post
               :content-type "application/edn"
@@ -334,6 +321,45 @@
         (is (= (list "job4" "job3" "job2" "job1")
                (map :job/name res)))))))
 
+(deftest save-execution
+  (let [system (new-system config)]
+    ;; setup data
+    ((-> (jobs/list-resource (:jobs system) "default")) {:request-method :post
+              :content-type "application/edn"
+              :body (pr-str {:job/name "job1"})})
+
+    (testing "save step-executions"
+      (let [job-id (->> (jobs/find-all (:jobs system) "default" "job1")
+                        first
+                        :db/id)
+            create-time (.toDate (f/parse (:date f/formatters) "2016-09-01"))
+            start-time (.toDate (f/parse (:date f/formatters) "2016-09-09"))
+            end-time (.toDate (f/parse (:date f/formatters) "2016-09-10"))
+            batch-status :batch-status/stopping
+            execution-id (-> (setup-execution (:jobs system)
+                                          {:db/id job-id
+                                           :job-execution/end-time end-time
+                                           :job-execution/start-time start-time
+                                           :job-execution/create-time create-time
+                                           :job-execution/batch-status batch-status})
+                             vals
+                             first)
+            handler (-> (jobs/execution-resource (:jobs system) execution-id))
+            request {:request-method :get}]
+        (jobs/save-execution (:jobs system) execution-id
+                       {:batch-status :batch-status/completed :exit-status "SUPERSUCCESS" :step-executions
+                        [{:end-time end-time
+                          :start-time start-time
+                          :batch-status batch-status
+                          :exit-status "SUCCESS"
+                          :step-execution-id 11111111111111}]})
+        (is (= "SUCCESS" (-> request handler :body read-string :job-execution/step-executions first :step-execution/exit-status)))))))
+
+
+
+
+
+
 (deftest parse-query
   (testing "parse-query"
     (let [result (jobs/parse-query "a b since:2016-09-01 until:2016-09-02 exit-status:COMPLETED batch-status:failed")]
@@ -377,7 +403,6 @@
       (is (not= :random (:next-execution-start result)))))
   (testing "parse-query-sort-order's-order"
     (let [result (jobs/parse-sort-order "last-execution-status:desc,name:asc,next-execution-start:asc,last-execution-started:desc,last-execution-duration:asc")]
-      (println (seq result))
       (is (= :last-execution-status (-> result first first)))
       (is (= :desc (-> result first second)))
       (is (= :name (-> result second first)))

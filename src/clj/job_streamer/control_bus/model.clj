@@ -96,8 +96,8 @@
    (schema calendar
            (fields
             [name :string :unique-value :indexed]
-            [weekly-holiday :string]
-            [holidays :instant :many]))
+            [holidays :instant :many]
+            [day-start :string]))
    (schema member
            (fields
              [user :ref]
