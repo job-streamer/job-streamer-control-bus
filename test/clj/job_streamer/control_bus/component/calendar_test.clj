@@ -65,7 +65,8 @@
                      :content-type "application/edn"
                      :body (pr-str {:calendar/name "cal"
                                     :calendar/weekly-holiday [true false false false false false true]
-                                    :calendar/holidays []})}]
+                                    :calendar/holidays []
+                                    :calendar/day-start "02:00"})}]
         (is (= 201 (-> (handler request) :status)))))
     (testing "get one calendar"
       (let [request {:request-method :get}
@@ -83,7 +84,8 @@
       (let [request {:request-method :get}
             res (-> (handler request) :body edn/read-string)]
         (is (= 2 (count res)))
-        (is (= "cal" (-> res first :calendar/name)))))))
+        (is (= "cal" (-> res first :calendar/name)))
+        (is (= "02:00" (-> res first :calendar/day-start)))))))
 
 (deftest download-list-resource
   (let [system (new-system config)
@@ -93,7 +95,8 @@
                      :content-type "application/edn"
                      :body (pr-str {:calendar/name "cal1"
                                     :calendar/weekly-holiday [true false false false false false true]
-                                    :calendar/holidays [(.toDate (f/parse (:date f/formatters) "2016-09-01"))]})}]
+                                    :calendar/holidays [(.toDate (f/parse (:date f/formatters) "2016-09-01"))]
+                                    :calendar/day-start "02:00"})}]
         (is (= 201 (-> ((-> (calendar/list-resource (:calendar system))) request) :status))))
       (let [request {:request-method :get}
             response (handler request)]
@@ -118,7 +121,6 @@
             :content-type "application/edn"
             :body cal}))
         (is before-response (handler request))))))
-
 
 (deftest parse-sort-order
   (testing "parse-query-name-asc"
