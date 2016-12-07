@@ -439,6 +439,12 @@
                 (when-let [[_ job-id] (find-by-name jobs app-name job-name)]
                   {:job-id job-id})
                 true))
+   :allowed? (fn [{{:keys [request-method identity]} :request}]
+               (let [permissions (:permissions identity)]
+                 (condp = request-method
+                   :get (:permission/read-job permissions)
+                   :post (:permission/create-job permissions)
+                   false)))
    :post! (fn [{job :edn job-id :job-id}]
             (let [datoms (edn->datoms job job-id)
                   job-id (:db/id (first datoms))]
@@ -483,6 +489,13 @@
    :exists? (when-let [[app-id job-id] (find-by-name jobs app-name job-name)]
               {:app-id app-id
                :job-id job-id})
+   :allowed? (fn [{{:keys [request-method identity]} :request}]
+               (let [permissions (:permissions identity)]
+                 (condp = request-method
+                   :get (:permission/read-job permissions)
+                   :put (:permission/update-job permissions)
+                   :delete (:permission/delete-job permissions)
+                   false)))
    :put! (fn [{job :edn job-id :job-id}]
            (d/transact datomic (edn->datoms job job-id)))
    :delete! (fn [{job-id :job-id app-id :app-id}]
@@ -536,6 +549,13 @@
   :exists? (when-let [[app-id job-id] (find-by-name jobs app-name job-name)]
              {:app-id app-id
               :job-id job-id})
+   :allowed? (fn [{{:keys [request-method identity]} :request}]
+               (let [permissions (:permissions identity)]
+                 (condp = request-method
+                   :get (:permission/read-job permissions)
+                   :put (:permission/create-job permissions)
+                   :delete (:permission/delete-job permissions)
+                   false)))
   :put! (fn [{settings :edn job-id :job-id}]
           (case cmd
             :exclusive (d/transact datomic
@@ -644,6 +664,12 @@
                                :batch-status/stopping}
                              (get-in last-execution [:job-execution/batch-status :db/ident]))
                   false))
+   :allowed? (fn [{{:keys [request-method identity]} :request}]
+               (let [permissions (:permissions identity)]
+                 (condp = request-method
+                   :get (:permission/read-job permissions)
+                   :post (:permission/execute-job permissions)
+                   false)))
    :put!  #(execute-job jobs app-name job-name %)
    :post! #(execute-job jobs app-name job-name %)
    :handle-ok (fn [{{{:keys [offset limit]} :params} :request}]
@@ -671,7 +697,12 @@
                   {:execution execution
                    :app-id app-id
                    :job-id job-id})))
-
+   :allowed? (fn [{{:keys [request-method identity]} :request}]
+               (let [permissions (:permissions identity)]
+                 (condp = request-method
+                   :get (:permission/read-job permissions)
+                   :put (:permission/execute-job permissions)
+                   false)))
    :put! (fn [{parameters :edn execution :execution
                job-id :job-id app-id :app-id}]
            (case cmd
