@@ -88,6 +88,11 @@
           (assoc-in [:session :identity] (select-keys user [:user/id :permissions]))))
     (redirect (str back "?error=true"))))
 
+(defn logout [{:keys [datomic token]} app-name {{:keys [next]} :params}]
+  (-> (redirect next)
+      (assoc :session {})))
+
+
 (defrecord Auth [datomic]
   component/Lifecycle
 
