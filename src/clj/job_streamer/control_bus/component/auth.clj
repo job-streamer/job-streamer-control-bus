@@ -81,17 +81,16 @@
           (d/transact datomic [user])
           user)))))
 
-(defn login [{:keys [datomic token]} app-name {{:keys [username password next back]} :params}]
-  (if-let [user (auth-by-password datomic username password app-name)]
+(defn login [{:keys [datomic token]} {{:keys [username password appname next back]} :params}]
+  (if-let [user (auth-by-password datomic username password appname)]
     (let [access-token (token/new-token token user)]
       (-> (redirect next)
           (assoc-in [:session :identity] (select-keys user [:user/id :permissions]))))
     (redirect (str back "?error=true"))))
 
-(defn logout [{:keys [datomic token]} app-name {{:keys [next]} :params}]
+(defn logout [{:keys [datomic token]} {{:keys [next]} :params}]
   (-> (redirect next)
       (assoc :session {})))
-
 
 (defrecord Auth [datomic]
   component/Lifecycle
