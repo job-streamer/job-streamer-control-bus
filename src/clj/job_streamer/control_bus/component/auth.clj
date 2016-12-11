@@ -5,6 +5,7 @@
             [buddy.core.hash]
             [bouncer.core :as b]
             [bouncer.validators :as v :refer [defvalidator]]
+            [liberator.core :as liberator]
             [clojure.string :as str]
             [ring.util.response :refer [response content-type header redirect]]
             (job-streamer.control-bus.component [datomic :as d]
@@ -48,7 +49,7 @@
                    :where [[?u :user/id ?id]]}
                  id)))
 
-(defn validate-user [datomic user]
+(defn- validate-user [datomic user]
   (b/validate user
               :user/password [[v/required :pre (comp nil? :user/token)]
                               [v/min-count 8 :message "Password must be at least 8 characters long." :pre (comp nil? :user/token)]]
@@ -92,6 +93,14 @@
   (-> (redirect next)
       (assoc :session {})))
 
+(defn list-resource
+  [{:keys [datomic] :as auth} &]
+  (liberator/resource
+    :available-media-types ["application/edn" "application/json"]
+    :allowed-methods [:get :post]
+    :post! (fn [ctx] (println ctx))
+    :handle-ok (fn [ctx] [{:id 1}])))
+
 (defrecord Auth [datomic]
   component/Lifecycle
 
@@ -104,24 +113,24 @@
                               :where [?e :user/id ?n]]
                             "admin")
            (let [user (signup datomic {:user/id "admin" :user/password "password123"})
-                 rolls (->> [:permission/read-job
-                             :permission/create-job
-                             :permission/update-job
-                             :permission/delete-job
-                             :permission/execute-job]
-                            (filter #(nil? (d/query datomic '[:find ?e .
-                                                              :in $ ?n
-                                                              :where [?e :roll/name ?n]]
-                                                    (name %))))
-                            (map #(assoc {}
-                                    :db/id (d/tempid :db.part/user)
-                                    :roll/name (name %)
-                                    :roll/permissions [%])))]
-             (when (not-empty rolls)
-               (d/transact datomic (concat rolls
-                                           [{:db/id #db/id[db.part/user -1]
-                                             :member/user [:user/id "admin"]
-                                             :member/rolls (map :db/id rolls)}])))))
+                 rolls [{:db/id (d/tempid :db.part/user)
+                         :roll/name "admin"
+                         :roll/permissions [:permission/read-job
+                                            :permission/create-job
+                                            :permission/update-job
+                                            :permission/delete-job
+                                            :permission/execute-job]}
+                        {:db/id (d/tempid :db.part/user)
+                         :roll/name "operator"
+                         :roll/permissions [:permission/read-job
+                                            :permission/execute-job]}
+                        {:db/id (d/tempid :db.part/user)
+                         :roll/name "watcher"
+                         :roll/permissions [:permission/read-job]}]]
+             (d/transact datomic (concat rolls
+                                         [{:db/id #db/id[db.part/user -1]
+                                           :member/user [:user/id "admin"]
+                                           :member/rolls (map :db/id rolls)}]))))
          component)
 
   (stop [component]

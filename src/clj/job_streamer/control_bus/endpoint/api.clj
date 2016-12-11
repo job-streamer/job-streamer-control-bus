@@ -24,6 +24,7 @@
    ;; Auth
    (POST "/login" request (auth/login auth request))
    (GET "/logout" request (auth/logout auth request))
+   (ANY "/user" request (auth/list-resource auth))
 
    ;; Job
    (ANY "/:app-name/jobs" [app-name]
