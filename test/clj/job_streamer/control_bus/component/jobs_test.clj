@@ -58,6 +58,8 @@
           [:db/add id :job/executions execution-id]])
         :tempids)))
 
+(def all-permissions #{:permission/update-job :permission/read-job :permission/create-job :permission/delete-job :permission/execute-job})
+
 (deftest find-all
   (testing "find-all"
     (let [system (new-system config)]
@@ -69,16 +71,18 @@
   (let [system (new-system config)
         handler (-> (jobs/list-resource (:jobs system) "default"))]
     (testing "no jobs"
-      (let [request {:request-method :get}]
+      (let [request {:request-method :get :identity {:permissions all-permissions}}]
         (is (= 0 (-> (handler request) :body edn/read-string :hits)))))
     (testing "validation error"
       (let [request {:request-method :post
+                     :identity {:permissions all-permissions}
                      :content-type "application/edn"
                      :body (pr-str {})}]
         (is (= ["name must be present"]
                (-> (handler request) :body edn/read-string :messages)))))
     (testing "create a job"
       (let [request {:request-method :post
+                     :identity {:permissions all-permissions}
                      :content-type "application/edn"
                      :body (pr-str {:job/name "job1"})}]
         (is (= 201 (-> (handler request) :status))))
@@ -89,14 +93,15 @@
   (let [system (new-system config)
         handler (-> (jobs/list-resource (:jobs system) "default" :download? true))]
     (testing "no jobs"
-      (let [request {:request-method :get}]
+      (let [request {:request-method :get :identity {:permissions all-permissions}}]
         (is (empty? (-> (handler request) :body read-string)))))
     (testing "has a job"
       (let [request {:request-method :post
+                     :identity {:permissions all-permissions}
                      :content-type "application/edn"
                      :body (pr-str {:job/name "job1"})}]
         (is (= 201 (-> ((-> (jobs/list-resource (:jobs system) "default")) request) :status))))
-      (let [request {:request-method :get}
+      (let [request {:request-method :get :identity {:permissions all-permissions}}
             response (handler request)]
         (is (= "job1" (-> response :body read-string first :job/name)))
         (is (= "application/force-download"  ((:headers response) "Content-Type")))
@@ -107,9 +112,11 @@
         handler (-> (jobs/list-resource (:jobs system) "default"))]
     ;; setup data
     (handler {:request-method :post
+              :identity {:permissions all-permissions}
               :content-type "application/edn"
               :body (pr-str {:job/name "job1"})})
     (handler {:request-method :post
+              :identity {:permissions all-permissions}
               :content-type "application/edn"
               :body (pr-str {:job/name "job2"})})
     (testing "Mathes exactly"
@@ -162,12 +169,15 @@
         handler (-> (jobs/list-resource (:jobs system) "default"))]
     ;; setup data
     (handler {:request-method :post
+              :identity {:permissions all-permissions}
               :content-type "application/edn"
               :body (pr-str {:job/name "job1"})})
     (handler {:request-method :post
+              :identity {:permissions all-permissions}
               :content-type "application/edn"
               :body (pr-str {:job/name "job2"})})
     (handler {:request-method :post
+              :identity {:permissions all-permissions}
               :content-type "application/edn"
               :body (pr-str {:job/name "job3"})})
     (testing "sort-by-name"
@@ -290,6 +300,7 @@
         (is (= (list "job1" "job2" "job3")
                (map :job/name res)))))
     (handler {:request-method :post
+              :identity {:permissions all-permissions}
               :content-type "application/edn"
               :body (pr-str {:job/name "job4"})})
     (let [job-id (->> (jobs/find-all (:jobs system) "default" "job4")
@@ -325,6 +336,7 @@
   (let [system (new-system config)]
     ;; setup data
     ((-> (jobs/list-resource (:jobs system) "default")) {:request-method :post
+              :identity {:permissions all-permissions}
               :content-type "application/edn"
               :body (pr-str {:job/name "job1"})})
 
@@ -345,7 +357,7 @@
                              vals
                              first)
             handler (-> (jobs/execution-resource (:jobs system) execution-id))
-            request {:request-method :get}]
+            request {:request-method :get :identity {:permissions all-permissions}}]
         (jobs/save-execution (:jobs system) execution-id
                        {:batch-status :batch-status/completed :exit-status "SUPERSUCCESS" :step-executions
                         [{:end-time end-time
