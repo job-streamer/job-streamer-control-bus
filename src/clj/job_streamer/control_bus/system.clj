@@ -108,10 +108,10 @@
           :socketapp [:datomic :jobs :agents]
           :jobs      [:datomic :scheduler :agents]
           :agents    [:datomic]
-          :apps      [:datomic :agents :auth]
+          :apps      [:datomic :agents]
           :calendar  [:datomic :scheduler]
           :scheduler [:datomic]
           :migration [:datomic]
           :recoverer [:datomic :jobs :agents]
           :dispatcher [:datomic :apps :jobs :agents]
-          :auth      [:token :datomic]}))))
+          :auth      [:token :datomic :apps]}))))
