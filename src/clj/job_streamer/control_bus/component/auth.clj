@@ -8,7 +8,8 @@
             [liberator.core :as liberator]
             [clojure.string :as str]
             [ring.util.response :refer [response content-type header redirect]]
-            (job-streamer.control-bus [validation :refer [validate]])
+            (job-streamer.control-bus [validation :refer [validate]]
+                                      [util :refer [parse-body]])
             (job-streamer.control-bus.component [datomic :as d]
                                                 [token :as token])))
 
