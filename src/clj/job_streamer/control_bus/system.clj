@@ -100,7 +100,7 @@
          :agents     (agents-component     (:agents     config))
          :calendar   (calendar-component   (:calendar   config))
          :token      (token-provider-component (:token config))
-         :auth       (auth-component (:auth config)))
+         :auth       (auth-component       (:auth config)))
         (component/system-using
          {:http      [:app :socketapp]
           :app       [:api :token]

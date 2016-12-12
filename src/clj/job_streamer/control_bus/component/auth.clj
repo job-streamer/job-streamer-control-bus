@@ -101,16 +101,20 @@
                              {:db/id (:db/id app)
                               :application/members (conj (:application/members app) member-id)}])))))
 
-(defn login [{:keys [datomic token]} {{:keys [username password appname next back]} :params}]
-  ;; TODO: Validate the redirect url.
-  (if-let [user (auth-by-password datomic username password appname)]
-    (let [access-token (token/new-token token user)]
-      (-> (redirect next)
-          (assoc-in [:session :identity] (select-keys user [:user/id :permissions]))))
-    (redirect (str back "?error=true"))))
+(defn login [{:keys [datomic token] :as component} {{:keys [username password appname next back]} :params}]
+  (let [{:keys [access-control-allow-origin]} component
+        white-list (-> access-control-allow-origin (clojure.string/split #" "))]
+    (if-not (and (some #(str/starts-with? next %) white-list)
+                 (some #(str/starts-with? back %) white-list))
+      {:status 403 :body "Redirect to specified url is forbidden."}
+      (if-let [user (auth-by-password datomic username password appname)]
+        (let [access-token (token/new-token token user)]
+          (-> (redirect next)
+              (assoc-in [:session :identity] (select-keys user [:user/id :permissions]))
+              (assoc-in [:body] (str access-token))))
+        (redirect (str back "?error=true"))))))
 
 (defn logout [{:keys [datomic token]} {{:keys [next]} :params}]
-  ;; TODO: Validate the redirect url.
   (-> (redirect next)
       (assoc :session {})))
 
