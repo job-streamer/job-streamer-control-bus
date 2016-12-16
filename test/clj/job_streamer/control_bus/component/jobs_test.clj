@@ -87,7 +87,19 @@
                      :body (pr-str {:job/name "job1"})}]
         (is (= 201 (-> (handler request) :status))))
       (let [res (jobs/find-all (:jobs system) "default" nil)]
-        (is (= 1 (count res)))))))
+        (is (= 1 (count res)))))
+    (testing "read a job is not authorized"
+      (let [request {:request-method :get
+                     :identity {:permissions #{:permission/update-job :permission/create-job :permission/delete-job :permission/execute-job}}
+                     :content-type "application/edn"
+                     :body (pr-str {:job/name "job1"})}]
+        (is (= 403 (-> (handler request) :status)))))
+    (testing "create a job is not authorized"
+      (let [request {:request-method :post
+                     :identity {:permissions #{:permission/update-job :permission/read-job :permission/delete-job :permission/execute-job}}
+                     :content-type "application/edn"
+                     :body (pr-str {:job/name "job1"})}]
+        (is (= 403 (-> (handler request) :status)))))))
 
 (deftest download-list-resource
   (let [system (new-system config)
