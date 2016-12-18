@@ -5,6 +5,9 @@
             [liberator.core :as liberator]
             [liberator.representation :refer [ring-response]]
             [clojure.string :as str]
+            [bouncer.core :as b]
+            [bouncer.validators :as v]
+            [clj-time.format :as f]
             (job-streamer.control-bus [util :refer [parse-body]])
             (job-streamer.control-bus.component [datomic :as d]))
   (:import [net.unit8.job_streamer.control_bus JobStreamerExecuteJob TimeKeeperJob HolidayAndWeeklyCalendar]
@@ -45,45 +48,45 @@
                       (build))]
     (.scheduleJob scheduler job-deail trigger)))
 
-(defn schedule [{:keys [datomic scheduler host port]} job-id cron-notation calendar-name]
-  (let [new-trigger (make-trigger job-id cron-notation calendar-name)
-        job (d/pull datomic
-                    '[:job/name
-                      {:job/schedule
-                       [:db/id
-                        :schedule/cron-notation]}] job-id)
-        app-name (d/query datomic
-                          '{:find [?app-name .]
-                            :in [$ ?job-id]
-                            :where [[?app :application/name ?app-name]
-                                    [?app :application/jobs ?job-id]]} job-id)
-        job-detail (.. (JobBuilder/newJob)
-                       (ofType JobStreamerExecuteJob)
-                       (withIdentity (str "job-" job-id))
-                       (usingJobData "app-name" app-name)
-                       (usingJobData "job-name" (:job/name job))
-                       (usingJobData "host" host)
-                       (usingJobData "port" port)
-                       (build))]
-    (if-let [trigger (.getTrigger scheduler (TriggerKey. (str "trigger-" job-id)))]
-      (do
-        (.rescheduleJob scheduler (.getKey trigger) new-trigger)
-        (d/transact datomic
-                    [(merge {:db/id (get-in job [:job/schedule :db/id])
-                             :schedule/cron-notation cron-notation
-                             :schedule/active? true}
-                            (when calendar-name
-                              {:schedule/calendar [:calendar/name calendar-name]})) ]))
-      (do
-        (.scheduleJob scheduler job-detail new-trigger)
-        (d/transact datomic
-                    [(merge {:db/id #db/id[db.part/user -1]
-                             :schedule/cron-notation cron-notation
-                             :schedule/active? true}
-                            (when calendar-name
-                              {:schedule/calendar [:calendar/name calendar-name]}))
-                         {:db/id job-id
-                          :job/schedule #db/id[db.part/user -1]}])))))
+;; (defn schedule [{:keys [datomic scheduler host port]} job-id cron-notation calendar-name]
+;;   (let [new-trigger (make-trigger job-id cron-notation calendar-name)
+;;         job (d/pull datomic
+;;                     '[:job/name
+;;                       {:job/schedule
+;;                        [:db/id
+;;                         :schedule/cron-notation]}] job-id)
+;;         app-name (d/query datomic
+;;                           '{:find [?app-name .]
+;;                             :in [$ ?job-id]
+;;                             :where [[?app :application/name ?app-name]
+;;                                     [?app :application/jobs ?job-id]]} job-id)
+;;         job-detail (.. (JobBuilder/newJob)
+;;                        (ofType JobStreamerExecuteJob)
+;;                        (withIdentity (str "job-" job-id))
+;;                        (usingJobData "app-name" app-name)
+;;                        (usingJobData "job-name" (:job/name job))
+;;                        (usingJobData "host" host)
+;;                        (usingJobData "port" port)
+;;                        (build))]
+;;     (if-let [trigger (.getTrigger scheduler (TriggerKey. (str "trigger-" job-id)))]
+;;       (do
+;;         (.rescheduleJob scheduler (.getKey trigger) new-trigger)
+;;         (d/transact datomic
+;;                     [(merge {:db/id (get-in job [:job/schedule :db/id])
+;;                              :schedule/cron-notation cron-notation
+;;                              :schedule/active? true}
+;;                             (when calendar-name
+;;                               {:schedule/calendar [:calendar/name calendar-name]})) ]))
+;;       (do
+;;         (.scheduleJob scheduler job-detail new-trigger)
+;;         (d/transact datomic
+;;                     [(merge {:db/id #db/id[db.part/user -1]
+;;                              :schedule/cron-notation cron-notation
+;;                              :schedule/active? true}
+;;                             (when calendar-name
+;;                               {:schedule/calendar [:calendar/name calendar-name]}))
+;;                          {:db/id job-id
+;;                           :job/schedule #db/id[db.part/user -1]}])))))
 
 (defn pause [{:keys [datomic scheduler]} job-id]
   (let [job (d/pull datomic
@@ -123,24 +126,23 @@
 (defn validate-format [cron-notation]
   (CronExpression/validateExpression cron-notation))
 
-(defn hh:MM? [hh:MM-string]
-  (and (some? hh:MM-string )
-       (re-find #"^\d{2}:\d{2}$" hh:MM-string)
-       (let [[hh MM] (-> hh:MM-string (str/split #":") (#(map read-string %)))]
-         (and (<= 0 hh 23)  (<= 0 MM 59)))))
+(defn hh:mm? [hh:mm-string]
+  (b/valid? {:time hh:mm-string} :time v/datetime (f/formatter "hh:mm")))
 
-(defn to-ms-from-hh:MM [hh:MM-string]
-  (if-not (hh:MM? hh:MM-string)
+(defn to-ms-from-hh:mm [hh:mm-string]
+  (if-not (hh:mm? hh:mm-string)
     0
-     (let [[hh MM] (-> hh:MM-string (str/split #":") (#(map read-string %)))]
+     (let [[hh MM] (-> hh:mm-string (str/split #":") (#(map read-string %)))]
       (* (+ (* hh 60) MM) 60000))))
+
+(read-string "08")
 
 (defn add-calendar [{:keys [scheduler]} calendar]
   (let [holiday-calendar (HolidayAndWeeklyCalendar.)]
     (doseq [holiday (:calendar/holidays calendar)]
       (.addExcludedDate holiday-calendar holiday))
     (.setDaysExcluded holiday-calendar (boolean-array (:calendar/weekly-holiday calendar)))
-    (.setDayStart holiday-calendar (to-ms-from-hh:MM (:calendar/day-start calendar)))
+    (.setDayStart holiday-calendar (to-ms-from-hh:mm (:calendar/day-start calendar)))
     (.addCalendar scheduler (:calendar/name calendar) holiday-calendar false false)))
 
 (defn delete-calendar[{:keys [scheduler]} calendar-name]
