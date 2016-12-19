@@ -553,7 +553,7 @@
                (let [permissions (:permissions identity)]
                  (condp = request-method
                    :get (:permission/read-job permissions)
-                   :put (:permission/create-job permissions)
+                   :put (:permission/update-job permissions)
                    :delete (:permission/delete-job permissions)
                    false)))
   :put! (fn [{settings :edn job-id :job-id}]

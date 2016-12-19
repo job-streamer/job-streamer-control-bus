@@ -117,7 +117,11 @@
             response (handler request)]
         (is (= "job1" (-> response :body read-string first :job/name)))
         (is (= "application/force-download"  ((:headers response) "Content-Type")))
-        (is (= "attachment; filename=\"jobs.edn\""  ((:headers response) "Content-disposition")))))))
+        (is (= "attachment; filename=\"jobs.edn\""  ((:headers response) "Content-disposition")))))
+    (testing "download job is not authorized"
+      (let [request {:request-method :get :identity {:permissions #{:permission/update-job :permission/create-job :permission/delete-job :permission/execute-job}}}
+            response (handler request)]
+        (is (= 403 (-> (handler request) :status)))))))
 
 (deftest find-all-with-query
   (let [system (new-system config)
@@ -437,3 +441,69 @@
       (is (= :desc (-> result seq (nth 3) second)))
       (is (= :last-execution-duration (-> result seq (nth 4) first)))
       (is (= :asc (-> result seq (nth 4) second))))))
+
+(deftest entry-resource
+  (let [system (new-system config)
+        handler (-> (jobs/entry-resource (:jobs system) "default" "test-job"))]
+    (testing "read entry is not authorized"
+      (let [request {:request-method :get
+                     :identity {:permissions #{:permission/update-job :permission/create-job :permission/delete-job :permission/execute-job}}
+                     :content-type "application/edn"}]
+        (is (= 403 (-> (handler request) :status)))))
+    (testing "create entry is not authorized"
+      (let [request {:request-method :put
+                     :identity {:permissions #{:permission/read-job :permission/create-job :permission/delete-job :permission/execute-job}}
+                     :content-type "application/edn"}]
+        (is (= 403 (-> (handler request) :status)))))
+    (testing "delete entry is not authorized"
+      (let [request {:request-method :delete
+                     :identity {:permissions #{:permission/read-job :permission/update-job :permission/create-job :permission/execute-job}}
+                     :content-type "application/edn"}]
+        (is (= 403 (-> (handler request) :status)))))))
+
+(deftest job-settings-resource
+  (let [system (new-system config)
+        handler (-> (jobs/job-settings-resource (:jobs system) "default" "test-job"))]
+    (testing "read setting is not authorized"
+      (let [request {:request-method :get
+                     :identity {:permissions #{:permission/update-job :permission/create-job :permission/delete-job :permission/execute-job}}
+                     :content-type "application/edn"}]
+        (is (= 403 (-> (handler request) :status)))))
+    (testing "update setting is not authorized"
+      (let [request {:request-method :put
+                     :identity {:permissions #{:permission/read-job :permission/create-job :permission/delete-job :permission/execute-job}}
+                     :content-type "application/edn"}]
+        (is (= 403 (-> (handler request) :status)))))
+    (testing "delete setting is not authorized"
+      (let [request {:request-method :delete
+                     :identity {:permissions #{:permission/read-job :permission/update-job :permission/create-job :permission/execute-job}}
+                     :content-type "application/edn"}]
+        (is (= 403 (-> (handler request) :status)))))))
+
+(deftest executions-resource
+  (let [system (new-system config)
+        handler (-> (jobs/executions-resource (:jobs system) "default" "test-job"))]
+    (testing "read executions is not authorized"
+      (let [request {:request-method :get
+                     :identity {:permissions #{:permission/update-job :permission/create-job :permission/delete-job :permission/execute-job}}
+                     :content-type "application/edn"}]
+        (is (= 403 (-> (handler request) :status)))))
+    (testing "executions are not authorized"
+      (let [request {:request-method :post
+                     :identity {:permissions #{:permission/read-job :permission/update-job :permission/create-job :permission/delete-job}}
+                     :content-type "application/edn"}]
+        (is (= 403 (-> (handler request) :status)))))))
+
+(deftest execution-resource
+  (let [system (new-system config)
+        handler (-> (jobs/execution-resource (:jobs system) "default" "test-job"))]
+    (testing "read execution is not authorized"
+      (let [request {:request-method :get
+                     :identity {:permissions #{:permission/update-job :permission/create-job :permission/delete-job :permission/execute-job}}
+                     :content-type "application/edn"}]
+        (is (= 403 (-> (handler request) :status)))))
+    (testing "execution is not authorized"
+      (let [request {:request-method :put
+                     :identity {:permissions #{:permission/read-job :permission/update-job :permission/create-job :permission/delete-job}}
+                     :content-type "application/edn"}]
+        (is (= 403 (-> (handler request) :status)))))))
