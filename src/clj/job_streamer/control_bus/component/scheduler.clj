@@ -153,6 +153,13 @@
    :malformed? #(parse-body %)
    :exists? (fn [ctx]
               (:job/schedule (d/pull datomic '[:job/schedule] job-id)))
+   :allowed? (fn [{{:keys [request-method identity]} :request}]
+               (let [permissions (:permissions identity)]
+                 (condp = request-method
+                   :post (:permission/execute-job permissions)
+                   :put (:permission/execute-job permissions)
+                   :delete (:permission/execute-job permissions)
+                   false)))
    :post! (fn [{s :edn}]
             (schedule scheduler job-id
                       (:schedule/cron-notation s)
