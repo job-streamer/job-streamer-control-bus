@@ -88,35 +88,43 @@
                          :in $ ?n
                          :where [?e :application/name ?n]]
                        "default")]
-      (d/transact datomic [user
-                           {:db/id member-id
-                            :member/user (select-keys user [:db/id])
-                            :member/rolls [roll-id]}
-                           (update-in (select-keys app [:db/id :application/members]) [:application/members] #(conj % member-id))]))))
+      (let [result (d/transact datomic [user
+                                        {:db/id member-id
+                                         :member/user (select-keys user [:db/id])
+                                         :member/rolls [roll-id]}
+                                        (update-in (select-keys app [:db/id :application/members]) [:application/members] #(conj % member-id))])]
+        (log/infof "Signup %s as %s succeeded." (:user/id user) roll-name)
+        result)))
 
-(defn login [{:keys [datomic token] :as component} {{:keys [username password appname next back] :as params} :params}]
-  (let [{:keys [access-control-allow-origin]} component
-        white-list (-> access-control-allow-origin (clojure.string/split #" "))]
-    (if-not (and (some #(str/starts-with? (str next) %) white-list)
-                 (some #(str/starts-with? (str back) %) white-list))
-      {:status 403 :body (pr-str ["Redirect to specified url is forbidden."])}
-      (if-let [message (:message (validate [false {:edn params}]
-                                           :username [v/required]
-                                           :password [v/required]
-                                           :appname  [v/required]))]
-        (-> (redirect (str back "?error=true"))
-            (assoc-in [:body] (pr-str (:messages message))))
-        (if-let [user (auth-by-password datomic username password appname)]
-          (let [access-token (token/new-token token user)]
-            (-> (redirect next)
-                (assoc-in [:session :identity] (select-keys user [:user/id :permissions]))
-                (assoc-in [:body] (pr-str {:token (str access-token)}))))
-          (-> (redirect (str back "?error=true"))
-              (assoc-in [:body] (pr-str ["Autification failure."]))))))))
+  (defn login [{:keys [datomic token] :as component} {{:keys [username password appname next back] :as params} :params}]
+    (let [{:keys [access-control-allow-origin]} component
+          white-list (-> access-control-allow-origin (clojure.string/split #" "))]
+      (log/infof "Login attempt with parameters : %s." (pr-str (assoc-in params [:password] "********")))
+      (if-not (and (some #(str/starts-with? (str next) %) white-list)
+                   (some #(str/starts-with? (str back) %) white-list))
+        (do (log/infof "Login attempt failed because of forbidden redirect url : %s." (pr-str (select-keys params [:next :back])))
+          {:status 403 :body (pr-str ["Redirect to specified url is forbidden."])})
+        (if-let [message (:message (validate [false {:edn params}]
+                                             :username [v/required]
+                                             :password [v/required]
+                                             :appname  [v/required]))]
+          (do (log/infof "Login attempt failed because of %s." (pr-str message))
+            (-> (redirect (str back "?error=true"))
+                (assoc-in [:body] (pr-str (:messages message)))))
+          (if-let [user (auth-by-password datomic username password appname)]
+            (let [access-token (token/new-token token user)
+                  _ (log/infof "Login attempt succeeded with access token : %s." access-token)]
+              (-> (redirect next)
+                  (assoc-in [:session :identity] (select-keys user [:user/id :permissions]))
+                  (assoc-in [:body] (pr-str {:token (str access-token)}))))
+            (do (log/info "Login attempt failed because of authentification failure.")
+              (-> (redirect (str back "?error=true"))
+                  (assoc-in [:body] (pr-str ["Autification failure."]))))))))))
 
 (defn logout [{:keys [datomic token]} {{:keys [next]} :params}]
-  (-> (redirect next)
-      (assoc :session {})))
+  (do (log/infof "Logout attemp succeeded and redirect to %s." next)
+    (-> (redirect next)
+        (assoc :session {}))))
 
 (defn list-resource
   [{:keys [datomic] :as component}]
