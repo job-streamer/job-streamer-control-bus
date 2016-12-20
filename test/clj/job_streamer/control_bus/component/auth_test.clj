@@ -92,7 +92,7 @@
       (let [request {:request-method :post
                      :content-type "application/edn"
                      :body (pr-str {:user/id "addeduser" :user/password "password123" :roll "watcher"})}
-            {:keys [status body]} (let [handler (auth/list-resource (:auth system))] (handler request))]
+            {:keys [status body]} (let [handler (auth/entry-resource (:auth system) nil)] (handler request))]
         (is (= 201 status)))
       (let [request {:request-method :post
                      :params {:username "addeduser" :password "password123" :appname "default" :next "http://localhost:3000" :back "http://localhost:3000/login"}}
@@ -123,7 +123,12 @@
         (are [x y] (= x y)
              200     status
              1       (-> body edn/read-string count)
-             "admin" (-> body edn/read-string first :user/id))))
+             "admin" (-> body edn/read-string first :user/id))))))
+
+(deftest entry-resource
+  ;; create user cases.
+  (let [system (new-system config)
+        handler (auth/entry-resource (:auth system) nil)]
     (testing "lacking id"
       (let [request {:request-method :post
                      :content-type "application/edn"
@@ -194,8 +199,28 @@
                      :body (pr-str {:user/id "test" :user/password "password123" :roll "watcher"})}
             {:keys [status body]} (handler request)]
         (is (= 201 status)))
-      (let [request {:request-method :get}
+      (let [handler (auth/list-resource (:auth system))
+            request {:request-method :get}
             {:keys [status body]} (handler request)]
         (are [x y] (= x y)
              200     status
-             2       (-> body edn/read-string count))))))
+             2       (-> body edn/read-string count))))
+    (let [system (new-system config)
+          handler (auth/entry-resource (:auth system) "test")]
+      (testing "delete user"
+        (let [request {:request-method :post
+                       :content-type "application/edn"
+                       :body (pr-str {:user/id "test" :user/password "password123" :roll "watcher"})}
+              {:keys [status body]} (handler request)]
+          (is (= 201 status)))
+        (let [request {:request-method :delete
+                       :content-type "application/edn"
+                       :body (pr-str {:user/password "password123" :roll "watcher"})}
+              {:keys [status body]} (handler request)]
+          (is (== 204 status)))
+        (let [handler (auth/list-resource (:auth system))
+              request {:request-method :get}
+              {:keys [status body]} (handler request)]
+          (are [x y] (= x y)
+               200     status
+               1       (-> body edn/read-string count)))))))

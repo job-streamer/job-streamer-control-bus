@@ -130,7 +130,17 @@
   [{:keys [datomic] :as component}]
   (liberator/resource
     :available-media-types ["application/edn" "application/json"]
-    :allowed-methods [:get :post]
+    :allowed-methods [:get]
+    :handle-ok (fn [_]
+                 (d/query datomic
+                          '[:find [(pull ?e [:user/id]) ...]
+                            :where [?e :user/id]]))))
+
+(defn entry-resource
+  [{:keys [datomic] :as component} user-id]
+  (liberator/resource
+    :available-media-types ["application/edn" "application/json"]
+    :allowed-methods [:post :delete]
     :malformed? (fn [ctx]
                   (validate (parse-body ctx)
                             :user/password [[v/required :pre (comp nil? :user/token)]
@@ -148,10 +158,9 @@
              (let [roll-name (:roll user)
                    user (select-keys user [:user/id :user/password])]
                (signup datomic user roll-name)))
-    :handle-ok (fn [_]
-                 (d/query datomic
-                          '[:find [(pull ?e [:user/id]) ...]
-                            :where [?e :user/id]]))))
+    :delete! (fn [_]
+               (d/transact datomic
+                           [[:db.fn/retractEntity [:user/id user-id]]]))))
 
 (defrecord Auth [datomic]
   component/Lifecycle
