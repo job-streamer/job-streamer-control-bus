@@ -32,6 +32,52 @@
          :migration [:datomic]})
       (component/start-system)))
 
+(deftest list-resources
+  (let [system (new-system config)
+        list-handler (-> (apps/list-resource (:apps system)))
+        entry-handler (-> (apps/batch-components-resource (:apps system) "default"))
+        get-request {:request-method :get}]
+    (testing "deploy app"
+      (let [post-request {:request-method :post
+                          :content-type "application/edn"
+                          :body (pr-str {:application/name "default",
+                                         :application/description "This is examples.",
+                                         :application/classpaths []})}]
+        (with-redefs-fn
+          {#'apps/scan-components (fn [classpaths]
+                                    {:batch-component/batchlet ["batchlet1", "batchelt2"]
+                                     :batch-component/item-reader []
+                                     :batch-component/item-writer []
+                                     :batch-component/item-processor []
+                                     :batch-component/throwable []})}
+          #(list-handler post-request))
+        (is (entry-handler get-request)
+            {:batch-component/batchlet ["batchlet1", "batchelt2"]
+             :batch-component/item-reader []
+             :batch-component/item-writer []
+             :batch-component/item-processor []
+             :batch-component/throwable []})))
+      (testing "undeploy app"
+         (let [post-request {:request-method :post
+                          :content-type "application/edn"
+                          :body (pr-str {:application/name "default",
+                                         :application/description "This is examples.",
+                                         :application/classpaths []})}]
+        (with-redefs-fn
+          {#'apps/scan-components (fn [classpaths]
+                                    {:batch-component/batchlet ["batchlet1"]
+                                     :batch-component/item-reader []
+                                     :batch-component/item-writer []
+                                     :batch-component/item-processor []
+                                     :batch-component/throwable []})}
+          #(list-handler post-request))
+        (is (entry-handler get-request)
+            {:batch-component/batchlet ["batchlet1"]
+             :batch-component/item-reader []
+             :batch-component/item-writer []
+             :batch-component/item-processor []
+             :batch-component/throwable []})))))
+
 (deftest batch-components-resource
   (let [system (new-system config)
         handler (-> (apps/batch-components-resource (:apps system) "default"))]
