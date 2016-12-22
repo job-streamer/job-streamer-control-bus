@@ -633,6 +633,7 @@
                           (not (:job/exclusive? (:job ctx)))))
    :put-to-existing? (fn [ctx]
                        (#{:put :post} (get-in ctx [:request :request-method])))
+   :post-to-missing? (fn [ctx] (find-by-name jobs app-name job-name))
    :conflict? (fn [{job :job}]
                 (if-let [last-execution (some->> (:job/executions job)
                                                  (sort #(compare (:job-execution/create-time %2) (:job-execution/create-time %1)))

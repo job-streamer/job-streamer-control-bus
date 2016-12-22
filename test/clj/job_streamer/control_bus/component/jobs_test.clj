@@ -355,10 +355,16 @@
                           :step-execution-id 11111111111111}]})
         (is (= "SUCCESS" (-> request handler :body read-string :job-execution/step-executions first :step-execution/exit-status)))))))
 
-
-
-
-
+(deftest executions-resource
+  (let [system (new-system config)]
+    ;; setup data
+    ((-> (jobs/list-resource (:jobs system) "default")) {:request-method :post
+              :content-type "application/edn"
+              :body (pr-str {:job/name "job1"})})
+    (testing "return 404 when job-name is not exist"
+      (let [handler (-> (jobs/executions-resource (:jobs system) "default" "job2"))
+            request {:request-method :post}]
+        (is (= 404 (-> request handler :status)))))))
 
 (deftest parse-query
   (testing "parse-query"
