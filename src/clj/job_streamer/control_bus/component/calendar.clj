@@ -76,7 +76,7 @@
    :allowed-methods [:get :post]
    :malformed? #(validate (parse-body %)
                           :calendar/name v/required
-                          :calendar/day-start [[(fn [val] (or (empty? val) (scheduler/hh:MM? val)))  :message "Invalid hh:MM format"]])
+                          :calendar/day-start [[(fn [val] (or (empty? val) (scheduler/hh:mm? val)))  :message "Invalid hh:mm format"]])
    :exists? (fn [{{cal-name :calendar/name} :edn :as ctx}]
               (if (#{:post} (get-in ctx [:request :request-method]))
                 (when-let [id (find-calendar-by-name component cal-name)]
@@ -120,7 +120,7 @@
    :malformed? (fn [ctx]
                  (or (validate (parse-body ctx)
                                :calendar/name v/required
-                               :calendar/day-start [[(fn [val] (or (empty? val) (scheduler/hh:MM? val)))  :message "Invalid hh:MM format"]])
+                               :calendar/day-start [[(fn [val] (or (empty? val) (scheduler/hh:mm? val)))  :message "Invalid hh:mm format"]])
                      (and (#{:delete} (get-in ctx [:request :request-method]))
                           (when (calendar-is-already-used-by-job? datomic name)
                             {:message {:messages ["This calendar is already used by some job."]}}))))
