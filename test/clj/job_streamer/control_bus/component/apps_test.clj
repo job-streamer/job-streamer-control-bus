@@ -71,12 +71,8 @@
                                      :batch-component/item-processor []
                                      :batch-component/throwable []})}
           #(list-handler post-request))
-        (is (entry-handler get-request)
-            {:batch-component/batchlet ["batchlet1"]
-             :batch-component/item-reader []
-             :batch-component/item-writer []
-             :batch-component/item-processor []
-             :batch-component/throwable []})))))
+        (is (= (-> get-request entry-handler :body read-string :batch-component/batchlet)
+            ["org.jobstreamer.batch.ShellBatchlet" "batchlet1"]))))))
 
 (deftest batch-components-resource
   (let [system (new-system config)
@@ -91,7 +87,7 @@
                               (io/delete-file uploaded))]
         (try
           (delete-updated)
-          (is (is (= 201 (-> (handler request) :status))))
+          (is (= 201 (-> (handler request) :status)))
           (is (.exists uploaded))
           (finally (delete-updated)))))
 
