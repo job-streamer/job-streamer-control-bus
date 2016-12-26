@@ -445,20 +445,26 @@
                    :get (:permission/read-job permissions)
                    :post (:permission/create-job permissions)
                    false)))
-   :post! (fn [{job :edn job-id :job-id}]
-            (let [datoms (edn->datoms job job-id)
+   :post! (fn [{job :edn posted-job-id :job-id}]
+            (let [datoms (edn->datoms job posted-job-id)
                   job-id (:db/id (first datoms))]
-              (d/transact datomic
-                          (conj datoms
-                                [:db/add [:application/name app-name] :application/jobs job-id]))
-              (doseq [notification (:job/status-notifications job)]
-                (save-status-notification jobs job-id notification))
-              (when-let [schedule (:job/schedule job)]
-                (scheduler/schedule
-                 scheduler job-id
-                 (:schedule/cron-notation schedule)
-                 nil)) ;; FIXME A Calendar cannnot be set here.
-              job))
+              (let [resolved-job-id
+                    (or posted-job-id
+                        (d/resolve-tempid
+                          datomic
+                          (:tempids
+                            (d/transact datomic
+                                        (conj datoms
+                                              [:db/add [:application/name app-name] :application/jobs job-id])))
+                          job-id))]
+                (doseq [notification (:job/status-notifications job)]
+                  (save-status-notification jobs resolved-job-id notification))
+                (when-let [schedule (:job/schedule job)]
+                  (scheduler/schedule
+                   scheduler resolved-job-id
+                   (:schedule/cron-notation schedule)
+                   nil)) ;; FIXME A Calendar cannnot be set here.
+                job)))
    :handle-ok (fn [{{{query :q with-params :with sort-order :sort-by
                       :keys [limit offset]} :params} :request}]
                 (let [job-list (->> (find-all jobs app-name query))

@@ -1,6 +1,7 @@
 (ns job-streamer.control-bus.component.jobs-test
   (:require (job-streamer.control-bus.component [jobs :as jobs]
                                                 [apps :as apps]
+                                                [scheduler :as scheduler]
                                                 [datomic :refer [datomic-component] :as d]
                                                 [migration :refer [migration-component]])
             (job-streamer.control-bus [system :as system]
@@ -29,11 +30,13 @@
   (-> (component/system-map
        :apps    (apps/apps-component (:apps config))
        :jobs    (jobs/jobs-component (:jobs config))
+       :scheduler (scheduler/scheduler-component (:scheduler config))
        :datomic (datomic-component   (:datomic config))
        :migration (migration-component {:dbschema model/dbschema}))
       (component/system-using
-       {:jobs [:datomic :migration]
+       {:jobs [:datomic :migration :scheduler]
         :apps [:datomic]
+        :scheduler [:datomic]
         :migration [:datomic]})
       (component/start-system)))
 
@@ -88,6 +91,37 @@
         (is (= 201 (-> (handler request) :status))))
       (let [res (jobs/find-all (:jobs system) "default" nil)]
         (is (= 1 (count res)))))
+    (testing "create a job with the schedule and the status-notifications."
+      (let [request {:request-method :post
+                     :identity {:permissions all-permissions}
+                     :content-type "application/edn"
+                     :body (pr-str {:job/name "test"
+                                    :job/schedule {:db/id 17592186045822
+                                                   :schedule/cron-notation "0 0 12 * * ?"
+                                                   :schedule/active? true}
+                                    :job/edn-notation "{:job/status-notifications [{:status-notification/type \"test-notification\"
+                                                                                    :status-notification/batch-status {:db/ident :batch-status/abandoned}}]
+                                                        :job/schedule nil
+                                                        :job/name \"test\"
+                                                        :job/components [{:step/name \"test-step\"
+                                                                          :step/properties nil
+                                                                          :step/batchlet {:batchlet/ref \"org.jobstreamer.batch.ShellBatchlet\"}}]
+                                                        :job/exclusive? false
+                                                        :job/properties nil}"
+                                    :job/exclusive? false
+                                    :job/status-notifications [{:status-notification/batch-status {:db/ident :batch-status/abandoned}
+                                                                :status-notification/type "test-notification"}]})}]
+        (is (= 201 (-> (handler request) :status))))
+      (let [handler (-> (jobs/entry-resource (:jobs system) "default" "test"))
+            request {:request-method :get
+                     :identity {:permissions #{:permission/read-job :permission/update-job :permission/create-job :permission/delete-job :permission/execute-job}}
+                     :content-type "application/edn"}]
+        (let [{:keys [status body]} (handler request)
+              {:keys [job/schedule job/status-notifications]} (read-string body)]
+          (are [x y] (= x y)
+               status 200
+               (count status-notifications) 1
+               (nil? schedule) false))))
     (testing "read a job is not authorized"
       (let [request {:request-method :get
                      :identity {:permissions #{:permission/update-job :permission/create-job :permission/delete-job :permission/execute-job}}
