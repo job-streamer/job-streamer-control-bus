@@ -131,7 +131,6 @@
                        :where [[?e :calendar/name ?n]]} name)
 
    :put! (fn [{cal :edn}]
-           ;
            (d/transact datomic
                        [[:db.fn/retractEntity (:db/id cal)]])
            (d/transact datomic
