@@ -5,7 +5,7 @@
             [clojure.tools.logging :as log]
             [compojure.core :refer [ANY GET POST routes]]
             [bouncer.validators :as v]
-            [ring.util.response :refer [content-type]]
+            [ring.util.response :refer [content-type resource-response]]
             (job-streamer.control-bus.component
              [apps :as apps]
              [jobs :as jobs]
@@ -27,6 +27,10 @@
    (ANY "/users" [] (auth/list-resource auth))
    (ANY "/user" [] (auth/entry-resource auth nil))
    (ANY ["/user/:user-id" :user-id #".*"] [user-id] (auth/entry-resource auth user-id))
+
+   (GET ["/:app-name/job/:job-name/bpmn" :app-name #".*" :job-name #".*"]
+        [app-name job-name]
+        (resource-response "job.bpmn"))
 
    ;; Job
    (ANY "/:app-name/jobs" [app-name]
