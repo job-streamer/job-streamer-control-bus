@@ -5,6 +5,8 @@
             [liberator.core :as liberator]
             [liberator.representation :refer [ring-response]]
             [clojure.string :as str]
+            [bouncer.core :as b]
+            [bouncer.validators :as v]
             (job-streamer.control-bus [util :refer [parse-body]])
             (job-streamer.control-bus.component [datomic :as d]))
   (:import [net.unit8.job_streamer.control_bus JobStreamerExecuteJob TimeKeeperJob HolidayAndWeeklyCalendar]
@@ -123,24 +125,23 @@
 (defn validate-format [cron-notation]
   (CronExpression/validateExpression cron-notation))
 
-(defn hh:MM? [hh:MM-string]
-  (and (some? hh:MM-string )
-       (re-find #"^\d{2}:\d{2}$" hh:MM-string)
-       (let [[hh MM] (-> hh:MM-string (str/split #":") (#(map read-string %)))]
-         (and (<= 0 hh 23)  (<= 0 MM 59)))))
+(defn hh:mm? [hh:mm-string]
+  (if hh:mm-string
+    (re-find #"^([01]?[0-9]|2[0-3]):([0-5][0-9])$" hh:mm-string)
+    false))
 
-(defn to-ms-from-hh:MM [hh:MM-string]
-  (if-not (hh:MM? hh:MM-string)
+(defn to-ms-from-hh:mm [hh:mm-string]
+  (if-not (hh:mm? hh:mm-string)
     0
-     (let [[hh MM] (-> hh:MM-string (str/split #":") (#(map read-string %)))]
-      (* (+ (* hh 60) MM) 60000))))
+     (let [[hh mm] (-> hh:mm-string (str/split #":") (#(map (fn [s] (Integer/parseInt s)) %)))]
+      (* (+ (* hh 60) mm) 60000))))
 
 (defn add-calendar [{:keys [scheduler]} calendar]
   (let [holiday-calendar (HolidayAndWeeklyCalendar.)]
     (doseq [holiday (:calendar/holidays calendar)]
       (.addExcludedDate holiday-calendar holiday))
     (.setDaysExcluded holiday-calendar (boolean-array (:calendar/weekly-holiday calendar)))
-    (.setDayStart holiday-calendar (to-ms-from-hh:MM (:calendar/day-start calendar)))
+    (.setDayStart holiday-calendar (to-ms-from-hh:mm (:calendar/day-start calendar)))
     (.addCalendar scheduler (:calendar/name calendar) holiday-calendar false false)))
 
 (defn delete-calendar[{:keys [scheduler]} calendar-name]
@@ -153,6 +154,13 @@
    :malformed? #(parse-body %)
    :exists? (fn [ctx]
               (:job/schedule (d/pull datomic '[:job/schedule] job-id)))
+   :allowed? (fn [{{:keys [request-method identity]} :request}]
+               (let [permissions (:permissions identity)]
+                 (condp = request-method
+                   :post (:permission/execute-job permissions)
+                   :put (:permission/execute-job permissions)
+                   :delete (:permission/execute-job permissions)
+                   false)))
    :post! (fn [{s :edn}]
             (schedule scheduler job-id
                       (:schedule/cron-notation s)

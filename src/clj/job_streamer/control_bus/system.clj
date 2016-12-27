@@ -33,18 +33,21 @@
             [buddy.auth.accessrules :refer [wrap-access-rules]]
             [buddy.auth.http :as http]))
 
-(defn wrap-same-origin-policy [handler alias]
+(defn wrap-same-origin-policy [handler {:keys [alias access-control-allow-origin]}]
   (fn [req]
     (if (= (:request-method req) :options)
       ;;Pre-flight request
       {:status 200
        :headers {"Access-Control-Allow-Methods" "POST,GET,PUT,DELETE,OPTIONS"
-                 "Access-Control-Allow-Origin" "*"
-                 "Access-Control-Allow-Headers" "Content-Type"}}
+                 "Access-Control-Allow-Origin" access-control-allow-origin
+                 "Access-Control-Allow-Headers" "Content-Type"
+                 "Access-Control-Allow-Credentials" "true"}}
       (when-let [resp (handler req)]
-        (header resp "Access-Control-Allow-Origin" "*")))))
+        (-> resp
+            (header "Access-Control-Allow-Origin" access-control-allow-origin)
+            (header "Access-Control-Allow-Credentials" "true"))))))
 
-(def access-rules [{:pattern #"^/(?!login).*$"
+(def access-rules [{:pattern #"^/(?!login|user).*$"
                     :handler authenticated?}])
 
 (defn token-base [token-provider]
@@ -63,11 +66,11 @@
 
 (def base-config
   {:app {:middleware [[wrap-not-found :not-found]
-                      [wrap-same-origin-policy :same-origin]
-                      [wrap-multipart-params]
                       [wrap-access-rules   :access-rules]
                       [wrap-authorization  :authorization]
                       [wrap-authn          :token :session-base]
+                      [wrap-same-origin-policy :same-origin]
+                      [wrap-multipart-params]
                       [wrap-defaults :defaults]]
          :access-rules {:rules access-rules :policy :allow}
          :session-base (session-backend)
@@ -97,7 +100,7 @@
          :agents     (agents-component     (:agents     config))
          :calendar   (calendar-component   (:calendar   config))
          :token      (token-provider-component (:token config))
-         :auth       (auth-component (:auth config)))
+         :auth       (auth-component       (:auth config)))
         (component/system-using
          {:http      [:app :socketapp]
           :app       [:api :token]
@@ -111,4 +114,4 @@
           :migration [:datomic]
           :recoverer [:datomic :jobs :agents]
           :dispatcher [:datomic :apps :jobs :agents]
-          :auth      [:token]}))))
+          :auth      [:token :datomic :apps]}))))

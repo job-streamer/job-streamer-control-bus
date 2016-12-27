@@ -1,43 +1,200 @@
 (ns job-streamer.control-bus.component.auth
   (:require [clojure.tools.logging :as log]
-            [clj-time.core :as t]
-            [clj-time.coerce :as c]
-            [clojure.edn :as edn]
             [com.stuartsierra.component :as component]
+            [buddy.core.nonce :as nonce]
+            [buddy.core.hash]
             [bouncer.core :as b]
-            [bouncer.validators :as v]
+            [bouncer.validators :as v :refer [defvalidator]]
             [liberator.core :as liberator]
             [clojure.string :as str]
-            [clj-time.format :as f]
-            [liberator.representation :refer [ring-response]]
-            [ring.util.response :refer [response content-type header]]
-            (job-streamer.control-bus [notification :as notification]
-                                      [validation :refer [validate]]
-                                      [util :refer [parse-body edn->datoms to-int]])
+            [ring.util.response :refer [response content-type header redirect]]
+            (job-streamer.control-bus [validation :refer [validate]]
+                                      [util :refer [parse-body]])
             (job-streamer.control-bus.component [datomic :as d]
-                                                [token :as token]))
-  (:import [java.util Date]))
+                                                [token :as token])))
 
-(defn- auth-by-password [datomic username password])
+(defn- auth-by-password [datomic user-id password app-name]
+  (when (and (not-empty user-id) (not-empty password))
+    (when-let [user (d/query datomic
+                             '{:find [(pull ?s [:*]) .]
+                               :in [$ ?uname ?passwd ?app-name]
+                               :where [[?s :user/id ?uname]
+                                       [?s :user/salt ?salt]
+                                       [(concat ?salt ?passwd) ?passwd-seq]
+                                       [(into-array Byte/TYPE ?passwd-seq) ?passwd-bytes]
+                                       [(buddy.core.hash/sha256 ?passwd-bytes) ?hash]
+                                       [(buddy.core.codecs/bytes->hex ?hash) ?hash-hex]
+                                       [?s :user/password ?hash-hex]
+                                       [?member :member/user ?s]
+                                       [?app :application/members ?member]
+                                       [?app :application/name ?app-name]]}
+                             user-id password app-name)]
+      (let [permissions (->> (d/query datomic
+                                      '{:find [?permission]
+                                        :in [$ ?app-name ?user-id]
+                                        :where [[?member :member/user ?user]
+                                                [?member :member/rolls ?roll]
+                                                [?roll :roll/permissions ?permission]
+                                                [?user :user/id ?user-id]
+                                                [?app :application/members ?member]
+                                                [?app :application/name ?app-name]]}
+                                      app-name user-id)
+                             (apply concat)
+                             set)]
+        (assoc user :permissions permissions)))))
 
-(defn auth-resource [{:keys [datomic token]}]
+(defvalidator unique-name-validator
+  {:default-message-format "%s is used by someone."}
+  [id datomic]
+  (nil? (d/query datomic
+                 '{:find [?u .]
+                   :in [$ ?id]
+                   :where [[?u :user/id ?id]]}
+                 id)))
+
+(defvalidator exist-roll-validator
+  {:default-message-format "%s is used by someone."}
+  [roll-name datomic]
+  (d/query datomic
+           '[:find ?e .
+             :in $ ?n
+             :where [?e :roll/name ?n]]
+           roll-name))
+
+(defn- signup [datomic user roll-name]
+  (when-let [user (let [salt (nonce/random-nonce 16)
+                        password (some-> (not-empty (:user/password user))
+                                         (.getBytes)
+                                         (#(into-array Byte/TYPE (concat salt %)))
+                                         buddy.core.hash/sha256
+                                         buddy.core.codecs/bytes->hex)]
+                    (if-not (or password (:user/token user))
+                      (throw (Exception.))
+                      (merge user
+                             {:db/id #db/id[db.part/user -1]}
+                             (when password
+                               {:user/password password
+                                :user/salt salt})
+                             (when-let [token (:user/token user)]
+                               {:user/token token}))))]
+    (let [roll-id (d/query datomic
+                           '[:find ?e .
+                             :in $ ?n
+                             :where [?e :roll/name ?n]]
+                           roll-name)
+          member-id (d/tempid :db.part/user)
+          app (d/query datomic
+                       '[:find (pull ?e [*]) .
+                         :in $ ?n
+                         :where [?e :application/name ?n]]
+                       "default")]
+      (let [result (d/transact datomic [user
+                                        {:db/id member-id
+                                         :member/user (select-keys user [:db/id])
+                                         :member/rolls [roll-id]}
+                                        (update-in (select-keys app [:db/id :application/members]) [:application/members] #(conj % member-id))])]
+        (log/infof "Signup %s as %s succeeded." (:user/id user) roll-name)
+        result))))
+
+(defn login [{:keys [datomic token] :as component} {{:keys [username password appname next back] :as params} :params}]
+  (let [{:keys [access-control-allow-origin]} component
+        white-list (-> access-control-allow-origin (clojure.string/split #" "))]
+    (log/infof "Login attempt with parameters : %s." (pr-str (assoc-in params [:password] "********")))
+    (if-not (and (some #(str/starts-with? (str next) %) white-list)
+                 (some #(str/starts-with? (str back) %) white-list))
+      (do (log/infof "Login attempt failed because of forbidden redirect url : %s." (pr-str (select-keys params [:next :back])))
+        {:status 403 :body (pr-str ["Redirect to specified url is forbidden."])})
+      (if-let [message (:message (validate [false {:edn params}]
+                                           :username [v/required]
+                                           :password [v/required]
+                                           :appname  [v/required]))]
+        (do (log/infof "Login attempt failed because of %s." (pr-str message))
+          (-> (redirect (str back "?error=true"))
+              (assoc-in [:body] (pr-str (:messages message)))))
+        (if-let [user (auth-by-password datomic username password appname)]
+          (let [access-token (token/new-token token user)
+                _ (log/infof "Login attempt succeeded with access token : %s." access-token)]
+            (-> (redirect next)
+                (assoc-in [:session :identity] (select-keys user [:user/id :permissions]))
+                (assoc-in [:body] (pr-str {:token (str access-token)}))))
+          (do (log/info "Login attempt failed because of authentification failure.")
+            (-> (redirect (str back "?error=true"))
+                (assoc-in [:body] (pr-str ["Autification failure."])))))))))
+
+(defn logout [{:keys [datomic token]} {{:keys [next]} :params}]
+  (do (log/infof "Logout attemp succeeded and redirect to %s." next)
+    (-> (redirect next)
+        (assoc :session {}))))
+
+(defn list-resource
+  [{:keys [datomic] :as component}]
   (liberator/resource
     :available-media-types ["application/edn" "application/json"]
-    :allowed-methods [:post]
-    :post! (fn [ctx]
-             (println "!!!" ctx)
-             (let [user {:name "admin" :password "admin"}
-                   access-token (token/new-token token user)]
-               {::post-response (merge user
-                                       {:token-type "bearer"
-                                        :access-token access-token})}))
-    :handle-created (fn [ctx]
-                      (::post-response ctx))))
+    :allowed-methods [:get]
+    :handle-ok (fn [_]
+                 (d/query datomic
+                          '[:find [(pull ?e [:user/id]) ...]
+                            :where [?e :user/id]]))))
 
-(defrecord Auth []
+(defn entry-resource
+  [{:keys [datomic] :as component} user-id]
+  (liberator/resource
+    :available-media-types ["application/edn" "application/json"]
+    :allowed-methods [:post :delete]
+    :malformed? (fn [ctx]
+                  (validate (parse-body ctx)
+                            :user/password [[v/required :pre (comp nil? :user/token)]
+                                            [v/min-count 8 :message "Password must be at least 8 characters long." :pre (comp nil? :user/token)]]
+                            :user/token    [[v/required :pre (comp nil? :user/password)]
+                                            [v/matches #"[0-9a-z]{16}" :pre (comp nil? :user/password)]]
+                            :user/id       [[v/required]
+                                            [v/min-count 3 :message "Username must be at least 3 characters long."]
+                                            [v/max-count 20 :message "Username is too long."]
+                                            [unique-name-validator datomic]]
+                            :roll          [[v/required]
+                                            [v/matches #"^[\w\-]+$"]
+                                            [exist-roll-validator datomic]]))
+    :post! (fn [{user :edn}]
+             (let [roll-name (:roll user)
+                   user (select-keys user [:user/id :user/password])]
+               (signup datomic user roll-name)))
+    :delete! (fn [_]
+               (d/transact datomic
+                           [[:db.fn/retractEntity [:user/id user-id]]]))))
+
+(defrecord Auth [datomic]
   component/Lifecycle
 
   (start [component]
+
+         ;; Create an initil user and rolls.
+         (->> [{:db/id (d/tempid :db.part/user)
+                :roll/name "admin"
+                :roll/permissions [:permission/read-job
+                                   :permission/create-job
+                                   :permission/update-job
+                                   :permission/delete-job
+                                   :permission/execute-job]}
+               {:db/id (d/tempid :db.part/user)
+                :roll/name "operator"
+                :roll/permissions [:permission/read-job
+                                   :permission/execute-job]}
+               {:db/id (d/tempid :db.part/user)
+                :roll/name "watcher"
+                :roll/permissions [:permission/read-job]}]
+              (filter #(nil? (d/query datomic
+                                      '[:find ?e .
+                                        :in $ ?n
+                                        :where [?e :roll/name ?n]]
+                                      (:roll/name %))))
+              (d/transact datomic))
+         (when-not (d/query datomic
+                            '[:find ?e .
+                              :in $ ?n
+                              :where [?e :user/id ?n]]
+                            "admin")
+           (signup datomic {:user/id "admin" :user/password "password123"} "admin"))
+
          component)
 
   (stop [component]
