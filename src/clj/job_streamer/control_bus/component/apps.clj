@@ -95,11 +95,13 @@
                             :application/description (:application/description app)
                             :application/classpaths (:application/classpaths app)}]))
             (register-app applications (assoc app :application/name "default"))
-
             (when-let [components (scan-components (:application/classpaths app))]
               (let [batch-component-id (find-batch-component datomic "default")]
+                (when batch-component-id
+                  (d/transact datomic
+                              [[:db.fn/retractEntity batch-component-id]]))
                 (d/transact datomic
-                            [(merge {:db/id (or batch-component-id
+                            [ (merge {:db/id (or batch-component-id
                                                 (d/tempid :db.part/user))
                                      :batch-component/application [:application/name "default"]}
                                     components)]))))
@@ -144,8 +146,11 @@
                                           :application/description description})
               (when-let [components (scan-components classpaths)]
                 (let [batch-component-id (find-batch-component datomic app-name)]
+                  (when batch-component-id
+                    (d/transact datomic
+                                [[:db.fn/retractEntity batch-component-id]]))
                   (d/transact datomic
-                              [(merge {:db/id (or batch-component-id
+                              [ (merge {:db/id (or batch-component-id
                                                   (d/tempid :db.part/user))
                                        :batch-component/application [:application/name app-name]}
                                       components)])))))
