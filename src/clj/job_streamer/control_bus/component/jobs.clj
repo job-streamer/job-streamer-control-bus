@@ -439,20 +439,32 @@
                 (when-let [[_ job-id] (find-by-name jobs app-name job-name)]
                   {:job-id job-id})
                 true))
-   :post! (fn [{job :edn job-id :job-id}]
-            (let [datoms (edn->datoms job job-id)
+   :allowed? (fn [{{:keys [request-method identity]} :request}]
+               (let [permissions (:permissions identity)]
+                 (condp = request-method
+                   :get (:permission/read-job permissions)
+                   :post (:permission/create-job permissions)
+                   false)))
+   :post! (fn [{job :edn posted-job-id :job-id}]
+            (let [datoms (edn->datoms job posted-job-id)
                   job-id (:db/id (first datoms))]
-              (d/transact datomic
-                          (conj datoms
-                                [:db/add [:application/name app-name] :application/jobs job-id]))
-              (doseq [notification (:job/status-notifications job)]
-                (save-status-notification jobs job-id notification))
-              (when-let [schedule (:job/schedule job)]
-                (scheduler/schedule
-                 scheduler job-id
-                 (:schedule/cron-notation schedule)
-                 nil)) ;; FIXME A Calendar cannnot be set here.
-              job))
+              (let [resolved-job-id
+                    (or posted-job-id
+                        (d/resolve-tempid
+                          datomic
+                          (:tempids
+                            (d/transact datomic
+                                        (conj datoms
+                                              [:db/add [:application/name app-name] :application/jobs job-id])))
+                          job-id))]
+                (doseq [notification (:job/status-notifications job)]
+                  (save-status-notification jobs resolved-job-id notification))
+                (when-let [schedule (:job/schedule job)]
+                  (scheduler/schedule
+                   scheduler resolved-job-id
+                   (:schedule/cron-notation schedule)
+                   nil)) ;; FIXME A Calendar cannnot be set here.
+                job)))
    :handle-ok (fn [{{{query :q with-params :with sort-order :sort-by
                       :keys [limit offset]} :params} :request}]
                 (let [job-list (->> (find-all jobs app-name query))
@@ -483,6 +495,13 @@
    :exists? (when-let [[app-id job-id] (find-by-name jobs app-name job-name)]
               {:app-id app-id
                :job-id job-id})
+   :allowed? (fn [{{:keys [request-method identity]} :request}]
+               (let [permissions (:permissions identity)]
+                 (condp = request-method
+                   :get (:permission/read-job permissions)
+                   :put (:permission/update-job permissions)
+                   :delete (:permission/delete-job permissions)
+                   false)))
    :put! (fn [{job :edn job-id :job-id}]
            (d/transact datomic (edn->datoms job job-id)))
    :delete! (fn [{job-id :job-id app-id :app-id}]
@@ -536,6 +555,13 @@
   :exists? (when-let [[app-id job-id] (find-by-name jobs app-name job-name)]
              {:app-id app-id
               :job-id job-id})
+   :allowed? (fn [{{:keys [request-method identity]} :request}]
+               (let [permissions (:permissions identity)]
+                 (condp = request-method
+                   :get (:permission/read-job permissions)
+                   :put (:permission/update-job permissions)
+                   :delete (:permission/delete-job permissions)
+                   false)))
   :put! (fn [{settings :edn job-id :job-id}]
           (case cmd
             :exclusive (d/transact datomic
@@ -644,6 +670,12 @@
                                :batch-status/stopping}
                              (get-in last-execution [:job-execution/batch-status :db/ident]))
                   false))
+   :allowed? (fn [{{:keys [request-method identity]} :request}]
+               (let [permissions (:permissions identity)]
+                 (condp = request-method
+                   :get (:permission/read-job permissions)
+                   :post (:permission/execute-job permissions)
+                   false)))
    :put!  #(execute-job jobs app-name job-name %)
    :post! #(execute-job jobs app-name job-name %)
    :handle-ok (fn [{{{:keys [offset limit]} :params} :request}]
@@ -671,7 +703,12 @@
                   {:execution execution
                    :app-id app-id
                    :job-id job-id})))
-
+   :allowed? (fn [{{:keys [request-method identity]} :request}]
+               (let [permissions (:permissions identity)]
+                 (condp = request-method
+                   :get (:permission/read-job permissions)
+                   :put (:permission/execute-job permissions)
+                   false)))
    :put! (fn [{parameters :edn execution :execution
                job-id :job-id app-id :app-id}]
            (case cmd

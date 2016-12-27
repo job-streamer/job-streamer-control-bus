@@ -30,7 +30,8 @@
                  [org.quartz-scheduler/quartz "2.2.3"]
 
                  ;; for monitoring agents
-                 [org.rrd4j/rrd4j "2.2.1"]]
+                 [org.rrd4j/rrd4j "2.2.1"]
+                 [buddy "1.2.0"]]
 
   :source-paths ["src/clj"]
   :test-paths   ["test/clj"]
@@ -63,7 +64,8 @@
                                   [kerodon "0.8.0"]]
                    :source-paths ["dev"]
                    :repl-options {:init-ns user}
-                   :env {:port "45102"}}
+                   :env {:port "45102"
+                         :access-control-allow-origin "http://localhost:3000"}}
    :project/test {:resource-paths ["test/resources"]
                   :dependencies [[junit "4.12"]
                                 [org.mockito/mockito-all "1.10.19"]

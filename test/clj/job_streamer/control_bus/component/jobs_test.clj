@@ -1,6 +1,7 @@
 (ns job-streamer.control-bus.component.jobs-test
   (:require (job-streamer.control-bus.component [jobs :as jobs]
                                                 [apps :as apps]
+                                                [scheduler :as scheduler]
                                                 [datomic :refer [datomic-component] :as d]
                                                 [migration :refer [migration-component]])
             (job-streamer.control-bus [system :as system]
@@ -29,11 +30,13 @@
   (-> (component/system-map
        :apps    (apps/apps-component (:apps config))
        :jobs    (jobs/jobs-component (:jobs config))
+       :scheduler (scheduler/scheduler-component (:scheduler config))
        :datomic (datomic-component   (:datomic config))
        :migration (migration-component {:dbschema model/dbschema}))
       (component/system-using
-       {:jobs [:datomic :migration]
+       {:jobs [:datomic :migration :scheduler]
         :apps [:datomic]
+        :scheduler [:datomic]
         :migration [:datomic]})
       (component/start-system)))
 
@@ -58,6 +61,8 @@
           [:db/add id :job/executions execution-id]])
         :tempids)))
 
+(def all-permissions #{:permission/update-job :permission/read-job :permission/create-job :permission/delete-job :permission/execute-job})
+
 (deftest find-all
   (testing "find-all"
     (let [system (new-system config)]
@@ -69,47 +74,99 @@
   (let [system (new-system config)
         handler (-> (jobs/list-resource (:jobs system) "default"))]
     (testing "no jobs"
-      (let [request {:request-method :get}]
+      (let [request {:request-method :get :identity {:permissions all-permissions}}]
         (is (= 0 (-> (handler request) :body edn/read-string :hits)))))
     (testing "validation error"
       (let [request {:request-method :post
+                     :identity {:permissions all-permissions}
                      :content-type "application/edn"
                      :body (pr-str {})}]
         (is (= ["name must be present"]
                (-> (handler request) :body edn/read-string :messages)))))
     (testing "create a job"
       (let [request {:request-method :post
+                     :identity {:permissions all-permissions}
                      :content-type "application/edn"
                      :body (pr-str {:job/name "job1"})}]
         (is (= 201 (-> (handler request) :status))))
       (let [res (jobs/find-all (:jobs system) "default" nil)]
-        (is (= 1 (count res)))))))
+        (is (= 1 (count res)))))
+    (testing "create a job with the schedule and the status-notifications."
+      (let [request {:request-method :post
+                     :identity {:permissions all-permissions}
+                     :content-type "application/edn"
+                     :body (pr-str {:job/name "test"
+                                    :job/schedule {:db/id 17592186045822
+                                                   :schedule/cron-notation "0 0 12 * * ?"
+                                                   :schedule/active? true}
+                                    :job/edn-notation "{:job/status-notifications [{:status-notification/type \"test-notification\"
+                                                                                    :status-notification/batch-status {:db/ident :batch-status/abandoned}}]
+                                                        :job/schedule nil
+                                                        :job/name \"test\"
+                                                        :job/components [{:step/name \"test-step\"
+                                                                          :step/properties nil
+                                                                          :step/batchlet {:batchlet/ref \"org.jobstreamer.batch.ShellBatchlet\"}}]
+                                                        :job/exclusive? false
+                                                        :job/properties nil}"
+                                    :job/exclusive? false
+                                    :job/status-notifications [{:status-notification/batch-status {:db/ident :batch-status/abandoned}
+                                                                :status-notification/type "test-notification"}]})}]
+        (is (= 201 (-> (handler request) :status))))
+      (let [handler (-> (jobs/entry-resource (:jobs system) "default" "test"))
+            request {:request-method :get
+                     :identity {:permissions #{:permission/read-job :permission/update-job :permission/create-job :permission/delete-job :permission/execute-job}}
+                     :content-type "application/edn"}]
+        (let [{:keys [status body]} (handler request)
+              {:keys [job/schedule job/status-notifications]} (read-string body)]
+          (are [x y] (= x y)
+               status 200
+               (count status-notifications) 1
+               (nil? schedule) false))))
+    (testing "read a job is not authorized"
+      (let [request {:request-method :get
+                     :identity {:permissions #{:permission/update-job :permission/create-job :permission/delete-job :permission/execute-job}}
+                     :content-type "application/edn"
+                     :body (pr-str {:job/name "job1"})}]
+        (is (= 403 (-> (handler request) :status)))))
+    (testing "create a job is not authorized"
+      (let [request {:request-method :post
+                     :identity {:permissions #{:permission/update-job :permission/read-job :permission/delete-job :permission/execute-job}}
+                     :content-type "application/edn"
+                     :body (pr-str {:job/name "job1"})}]
+        (is (= 403 (-> (handler request) :status)))))))
 
 (deftest download-list-resource
   (let [system (new-system config)
         handler (-> (jobs/list-resource (:jobs system) "default" :download? true))]
     (testing "no jobs"
-      (let [request {:request-method :get}]
+      (let [request {:request-method :get :identity {:permissions all-permissions}}]
         (is (empty? (-> (handler request) :body read-string)))))
     (testing "has a job"
       (let [request {:request-method :post
+                     :identity {:permissions all-permissions}
                      :content-type "application/edn"
                      :body (pr-str {:job/name "job1"})}]
         (is (= 201 (-> ((-> (jobs/list-resource (:jobs system) "default")) request) :status))))
-      (let [request {:request-method :get}
+      (let [request {:request-method :get :identity {:permissions all-permissions}}
             response (handler request)]
         (is (= "job1" (-> response :body read-string first :job/name)))
         (is (= "application/force-download"  ((:headers response) "Content-Type")))
-        (is (= "attachment; filename=\"jobs.edn\""  ((:headers response) "Content-disposition")))))))
+        (is (= "attachment; filename=\"jobs.edn\""  ((:headers response) "Content-disposition")))))
+    (testing "download job is not authorized"
+      (let [request {:request-method :get :identity {:permissions #{:permission/update-job :permission/create-job :permission/delete-job :permission/execute-job}}}
+            response (handler request)]
+        (is (= 403 (-> (handler request) :status)))))))
 
 (deftest find-all-with-query
   (let [system (new-system config)
         handler (-> (jobs/list-resource (:jobs system) "default"))]
     ;; setup data
     (handler {:request-method :post
+              :identity {:permissions all-permissions}
               :content-type "application/edn"
               :body (pr-str {:job/name "job1"})})
     (handler {:request-method :post
+              :identity {:permissions all-permissions}
               :content-type "application/edn"
               :body (pr-str {:job/name "job2"})})
     (testing "Mathes exactly"
@@ -162,12 +219,15 @@
         handler (-> (jobs/list-resource (:jobs system) "default"))]
     ;; setup data
     (handler {:request-method :post
+              :identity {:permissions all-permissions}
               :content-type "application/edn"
               :body (pr-str {:job/name "job1"})})
     (handler {:request-method :post
+              :identity {:permissions all-permissions}
               :content-type "application/edn"
               :body (pr-str {:job/name "job2"})})
     (handler {:request-method :post
+              :identity {:permissions all-permissions}
               :content-type "application/edn"
               :body (pr-str {:job/name "job3"})})
     (testing "sort-by-name"
@@ -290,6 +350,7 @@
         (is (= (list "job1" "job2" "job3")
                (map :job/name res)))))
     (handler {:request-method :post
+              :identity {:permissions all-permissions}
               :content-type "application/edn"
               :body (pr-str {:job/name "job4"})})
     (let [job-id (->> (jobs/find-all (:jobs system) "default" "job4")
@@ -325,6 +386,7 @@
   (let [system (new-system config)]
     ;; setup data
     ((-> (jobs/list-resource (:jobs system) "default")) {:request-method :post
+              :identity {:permissions all-permissions}
               :content-type "application/edn"
               :body (pr-str {:job/name "job1"})})
 
@@ -345,7 +407,7 @@
                              vals
                              first)
             handler (-> (jobs/execution-resource (:jobs system) execution-id))
-            request {:request-method :get}]
+            request {:request-method :get :identity {:permissions all-permissions}}]
         (jobs/save-execution (:jobs system) execution-id
                        {:batch-status :batch-status/completed :exit-status "SUPERSUCCESS" :step-executions
                         [{:end-time end-time
@@ -413,3 +475,69 @@
       (is (= :desc (-> result seq (nth 3) second)))
       (is (= :last-execution-duration (-> result seq (nth 4) first)))
       (is (= :asc (-> result seq (nth 4) second))))))
+
+(deftest entry-resource
+  (let [system (new-system config)
+        handler (-> (jobs/entry-resource (:jobs system) "default" "test-job"))]
+    (testing "read entry is not authorized"
+      (let [request {:request-method :get
+                     :identity {:permissions #{:permission/update-job :permission/create-job :permission/delete-job :permission/execute-job}}
+                     :content-type "application/edn"}]
+        (is (= 403 (-> (handler request) :status)))))
+    (testing "create entry is not authorized"
+      (let [request {:request-method :put
+                     :identity {:permissions #{:permission/read-job :permission/create-job :permission/delete-job :permission/execute-job}}
+                     :content-type "application/edn"}]
+        (is (= 403 (-> (handler request) :status)))))
+    (testing "delete entry is not authorized"
+      (let [request {:request-method :delete
+                     :identity {:permissions #{:permission/read-job :permission/update-job :permission/create-job :permission/execute-job}}
+                     :content-type "application/edn"}]
+        (is (= 403 (-> (handler request) :status)))))))
+
+(deftest job-settings-resource
+  (let [system (new-system config)
+        handler (-> (jobs/job-settings-resource (:jobs system) "default" "test-job"))]
+    (testing "read setting is not authorized"
+      (let [request {:request-method :get
+                     :identity {:permissions #{:permission/update-job :permission/create-job :permission/delete-job :permission/execute-job}}
+                     :content-type "application/edn"}]
+        (is (= 403 (-> (handler request) :status)))))
+    (testing "update setting is not authorized"
+      (let [request {:request-method :put
+                     :identity {:permissions #{:permission/read-job :permission/create-job :permission/delete-job :permission/execute-job}}
+                     :content-type "application/edn"}]
+        (is (= 403 (-> (handler request) :status)))))
+    (testing "delete setting is not authorized"
+      (let [request {:request-method :delete
+                     :identity {:permissions #{:permission/read-job :permission/update-job :permission/create-job :permission/execute-job}}
+                     :content-type "application/edn"}]
+        (is (= 403 (-> (handler request) :status)))))))
+
+(deftest executions-resource
+  (let [system (new-system config)
+        handler (-> (jobs/executions-resource (:jobs system) "default" "test-job"))]
+    (testing "read executions is not authorized"
+      (let [request {:request-method :get
+                     :identity {:permissions #{:permission/update-job :permission/create-job :permission/delete-job :permission/execute-job}}
+                     :content-type "application/edn"}]
+        (is (= 403 (-> (handler request) :status)))))
+    (testing "executions are not authorized"
+      (let [request {:request-method :post
+                     :identity {:permissions #{:permission/read-job :permission/update-job :permission/create-job :permission/delete-job}}
+                     :content-type "application/edn"}]
+        (is (= 403 (-> (handler request) :status)))))))
+
+(deftest execution-resource
+  (let [system (new-system config)
+        handler (-> (jobs/execution-resource (:jobs system) "default" "test-job"))]
+    (testing "read execution is not authorized"
+      (let [request {:request-method :get
+                     :identity {:permissions #{:permission/update-job :permission/create-job :permission/delete-job :permission/execute-job}}
+                     :content-type "application/edn"}]
+        (is (= 403 (-> (handler request) :status)))))
+    (testing "execution is not authorized"
+      (let [request {:request-method :put
+                     :identity {:permissions #{:permission/read-job :permission/update-job :permission/create-job :permission/delete-job}}
+                     :content-type "application/edn"}]
+        (is (= 403 (-> (handler request) :status)))))))
