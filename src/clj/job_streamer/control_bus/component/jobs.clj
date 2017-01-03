@@ -457,6 +457,9 @@
                                         (conj datoms
                                               [:db/add [:application/name app-name] :application/jobs job-id])))
                           job-id))]
+                (d/transact datomic [{:db/id resolved-job-id
+                                      :job/bpmn-xml-notation (slurp (clojure.java.io/resource "job.bpmn"))
+                                      :job/svg-notation (slurp (clojure.java.io/resource "job.svg"))}])
                 (doseq [notification (:job/status-notifications job)]
                   (save-status-notification jobs resolved-job-id notification))
                 (when-let [schedule (:job/schedule job)]
@@ -546,6 +549,30 @@
                        :job/dynamic-parameters (extract-job-parameters job))
                      (dissoc :job/executions))))))
 
+(defn bpmn-resource [{:keys [datomic scheduler] :as jobs} app-name job-name]
+  (liberator/resource
+   :available-media-types ["application/edn" "application/json"]
+   :allowed-methods [:get :put]
+   :malformed? #(parse-body %)
+   :exists? (when-let [[app-id job-id] (find-by-name jobs app-name job-name)]
+              {:app-id app-id
+               :job-id job-id})
+   :allowed? (fn [{{:keys [request-method identity]} :request}]
+               (let [permissions (:permissions identity)]
+                 (condp = request-method
+                   :get (:permission/read-job permissions)
+                   :put (:permission/update-job permissions)
+                   :delete (:permission/delete-job permissions)
+                   false)))
+   :put! (fn [{job :edn job-id :job-id}]
+           ;; TODO: implement.
+           (d/transact datomic (edn->datoms job job-id)))
+   :handle-ok (fn [ctx]
+                ;; TODO: implement.
+               (let [job (d/pull datomic
+                                 '[:job/bpmn-xml-notation :job/svg-notation]
+                                 (:job-id ctx))]
+                 job))))
 
 (defn job-settings-resource [{:keys [datomic] :as jobs} app-name job-name & [cmd]]
   (liberator/resource

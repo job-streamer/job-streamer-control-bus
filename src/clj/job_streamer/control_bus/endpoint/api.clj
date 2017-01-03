@@ -28,9 +28,9 @@
    (ANY "/user" [] (auth/entry-resource auth nil))
    (ANY ["/user/:user-id" :user-id #".*"] [user-id] (auth/entry-resource auth user-id))
 
-   (GET ["/:app-name/job/:job-name/bpmn" :app-name #".*" :job-name #".*"]
+   (ANY ["/:app-name/job/:job-name/bpmn" :app-name #".*" :job-name #".*"]
         [app-name job-name]
-        (resource-response "job.bpmn"))
+        (jobs/bpmn-resource jobs app-name job-name))
 
    ;; Job
    (ANY "/:app-name/jobs" [app-name]
