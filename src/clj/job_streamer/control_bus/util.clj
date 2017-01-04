@@ -38,6 +38,8 @@
               :job/name (:job/name job)
               :job/restartable? (get job :job/restartable? true)
               :job/edn-notation (pr-str job)
+              :job/svg-notation (get job :job/svg-notation)
+              :job/bpmn-xml-notation (get job :job/bpmn-xml-notation)
               :job/steps step-refs
               :job/exclusive? (get job :job/exclusive? false)}]
             (when-let [time-monitor (:job/time-monitor job)]
@@ -115,11 +117,15 @@
 
 (defn xml->edn
   "Convert a format from XML to edn."
-  [xml]
-  (let [doc (Jsoup/parse xml)
-        job (. doc select "job")]
-    {:job/name (.attr job "id")
-     :job/components (xml->components job)}))
+  ([xml]
+   (let [doc (Jsoup/parse xml)
+         job (. doc select "job")]
+     {:job/name (.attr job "id")
+      :job/components (xml->components job)}))
+  ([xml job job-name]
+   (merge job {:job/name job-name
+               :job/components []
+               :job/properties []})))
 
 (defn- body-as-string [ctx]
   (if-let [body (get-in ctx [:request :body])]

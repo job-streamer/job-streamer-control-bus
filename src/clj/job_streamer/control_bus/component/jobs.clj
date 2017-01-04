@@ -14,7 +14,7 @@
             [ring.util.response :refer [response content-type header]]
             (job-streamer.control-bus [notification :as notification]
                                       [validation :refer [validate]]
-                                      [util :refer [parse-body edn->datoms to-int]])
+                                      [util :refer [parse-body edn->datoms to-int xml->edn]])
             (job-streamer.control-bus.component [datomic :as d]
                                                 [agents  :as ag]
                                                 [scheduler :as scheduler]))
@@ -552,8 +552,8 @@
 (defn bpmn-resource [{:keys [datomic scheduler] :as jobs} app-name job-name]
   (liberator/resource
    :available-media-types ["application/edn" "application/json"]
-   :allowed-methods [:get :put]
-   :malformed? #(parse-body %)
+   :allowed-methods [:get :post]
+   :malformed? #(parse-body %) ;; TODO: Validate xml format.
    :exists? (when-let [[app-id job-id] (find-by-name jobs app-name job-name)]
               {:app-id app-id
                :job-id job-id})
@@ -561,13 +561,17 @@
                (let [permissions (:permissions identity)]
                  (condp = request-method
                    :get (:permission/read-job permissions)
-                   :put (:permission/update-job permissions)
-                   :delete (:permission/delete-job permissions)
+                   :post (:permission/create-job permissions)
                    false)))
-   :put! (fn [{job :edn job-id :job-id}]
-           ;; TODO: implement.
-           (d/transact datomic (edn->datoms job job-id)))
-   :handle-ok (fn [ctx]
+   :post! (fn [{job :edn posted-job-id :job-id}]
+            (let [datoms (as-> job $
+                              (xml->edn (:job/bpmn-xml-notation $) $ job-name)
+                              (edn->datoms $ posted-job-id))
+                  job-id (:db/id (first datoms))]
+              (d/transact datomic
+                          (conj datoms
+                                [:db/add [:application/name app-name] :application/jobs job-id]))))
+    :handle-ok (fn [ctx]
                 ;; TODO: implement.
                (let [job (d/pull datomic
                                  '[:job/bpmn-xml-notation :job/svg-notation]
