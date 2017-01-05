@@ -38,8 +38,8 @@
               :job/name (:job/name job)
               :job/restartable? (get job :job/restartable? true)
               :job/edn-notation (pr-str job)
-              :job/svg-notation (get job :job/svg-notation)
-              :job/bpmn-xml-notation (get job :job/bpmn-xml-notation)
+              :job/svg-notation (get job :job/svg-notation "")
+              :job/bpmn-xml-notation (get job :job/bpmn-xml-notation "")
               :job/steps step-refs
               :job/exclusive? (get job :job/exclusive? false)}]
             (when-let [time-monitor (:job/time-monitor job)]

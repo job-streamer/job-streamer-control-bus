@@ -457,9 +457,9 @@
                                         (conj datoms
                                               [:db/add [:application/name app-name] :application/jobs job-id])))
                           job-id))]
-                (d/transact datomic [{:db/id resolved-job-id
-                                      :job/bpmn-xml-notation (slurp (clojure.java.io/resource "job.bpmn"))
-                                      :job/svg-notation (slurp (clojure.java.io/resource "job.svg"))}])
+                (d/transact datomic [{:db/id                 resolved-job-id
+                                      :job/bpmn-xml-notation (slurp (clojure.java.io/resource "job.bpmn.template"))
+                                      :job/svg-notation      (slurp (clojure.java.io/resource "job.svg.template"))}])
                 (doseq [notification (:job/status-notifications job)]
                   (save-status-notification jobs resolved-job-id notification))
                 (when-let [schedule (:job/schedule job)]
@@ -576,6 +576,7 @@
                (let [job (d/pull datomic
                                  '[:job/bpmn-xml-notation :job/svg-notation]
                                  (:job-id ctx))]
+                 (println job)
                  job))))
 
 (defn job-settings-resource [{:keys [datomic] :as jobs} app-name job-name & [cmd]]
