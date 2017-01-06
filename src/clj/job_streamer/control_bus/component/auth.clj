@@ -6,6 +6,7 @@
             [bouncer.core :as b]
             [bouncer.validators :as v :refer [defvalidator]]
             [liberator.core :as liberator]
+            [liberator.representation :refer [ring-response]]
             [clojure.string :as str]
             [ring.util.response :refer [response content-type header redirect]]
             (job-streamer.control-bus [validation :refer [validate]]
@@ -96,35 +97,38 @@
         (log/infof "Signup %s as %s succeeded." (:user/id user) roll-name)
         result))))
 
-(defn login [{:keys [datomic token] :as component} {{:keys [username password appname next back] :as params} :params}]
-  (let [{:keys [access-control-allow-origin]} component
-        white-list (-> access-control-allow-origin (clojure.string/split #" "))]
-    (log/infof "Login attempt with parameters : %s." (pr-str (assoc-in params [:password] "********")))
-    (if-not (and (some #(str/starts-with? (str next) %) white-list)
-                 (some #(str/starts-with? (str back) %) white-list))
-      (do (log/infof "Login attempt failed because of forbidden redirect url : %s." (pr-str (select-keys params [:next :back])))
-        {:status 403 :body (pr-str ["Redirect to specified url is forbidden."])})
-      (if-let [message (:message (validate [false {:edn params}]
-                                           :username [v/required]
-                                           :password [v/required]
-                                           :appname  [v/required]))]
-        (do (log/infof "Login attempt failed because of %s." (pr-str message))
-          (-> (redirect (str back "?error=true"))
-              (assoc-in [:body] (pr-str (:messages message)))))
-        (if-let [user (auth-by-password datomic username password appname)]
-          (let [access-token (token/new-token token user)
-                _ (log/infof "Login attempt succeeded with access token : %s." access-token)]
-            (-> (redirect next)
-                (assoc-in [:session :identity] (select-keys user [:user/id :permissions]))
-                (assoc-in [:body] (pr-str {:token (str access-token)}))))
-          (do (log/info "Login attempt failed because of authentification failure.")
-            (-> (redirect (str back "?error=true"))
-                (assoc-in [:body] (pr-str ["Autification failure."])))))))))
+(defn login [{:keys [datomic token] :as component} username password appname]
+  (log/infof "Login attempt with parameters : %s." (pr-str {:username username :password "********" :appname appname}))
+  (if-let [user (auth-by-password datomic username password appname)]
+    (let [access-token (token/new-token token user)
+          _ (log/infof "Login attempt succeeded with access token : %s." access-token)]
+      (ring-response {:session {:identity (select-keys user [:user/id :permissions])}
+                      :body (pr-str {:token (str access-token)})}))
+    (do (log/info "Login attempt failed because of authentification failure.")
+      (ring-response {:body (pr-str ["Autification failure."])}))))
 
-(defn logout [{:keys [datomic token]} {{:keys [next]} :params}]
-  (do (log/infof "Logout attemp succeeded and redirect to %s." next)
-    (-> (redirect next)
-        (assoc :session {}))))
+(defn auth-resource
+  [{:keys [datomic token] :as component}]
+  (liberator/resource
+    :available-media-types ["application/edn" "application/json"]
+    :allowed-methods [:post :delete]
+    :malformed? (fn [ctx]
+                  (validate (parse-body ctx)
+                            :user/id [v/required [v/matches #"^[\w\-]+$"]]
+                            :user/password [v/required [v/matches #"^[\w\-]+$"]]
+                            :user/app-name [v/required [v/matches #"^[\w\-]+$"]]))
+    :handle-created (fn [{{:keys [user/id user/password user/app-name]} :edn}]
+                      (log/infof "Login attempt with parameters : %s." (pr-str {:username id :password "********" :appname app-name}))
+                      (if-let [user (auth-by-password datomic id password app-name)]
+                        (let [access-token (token/new-token token user)
+                              _ (log/infof "Login attempt succeeded with access token : %s." access-token)]
+                          (ring-response {:status 200
+                                          ;; TODO: Research why ring session is not set.
+                                          :session {:identity (select-keys user [:user/id :permissions])}
+                                          :body (pr-str {:token (str access-token)})}))
+                        (do (log/info "Login attempt failed because of authentification failure.")
+                          (ring-response {:body (pr-str ["Autification failure."])}))))
+    :delete! (fn [_] (ring-response {:status 200 :session {}}))))
 
 (defn list-resource
   [{:keys [datomic] :as component}]
