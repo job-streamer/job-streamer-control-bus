@@ -195,6 +195,13 @@
 
 (defn find-all [{:keys [datomic]} app-name query]
   (let [qmap (parse-query query)
+        latest-executions (->> (d/query datomic
+                                 '{:find [?job (max ?job-executions)]
+                                   :where [[?app :application/name ?app-name]
+                                           [?app :application/jobs ?job]
+                                           [?job :job/executions ?job-executions]]})
+                               (map second)
+                               set)
         base-query '{:find [?job]
                      :in [$ ?app-name [?job-name-condition ...] ?since-condition ?until-condition ?exit-status-condition ?batch-status-condition]
                      :where [[?app :application/name ?app-name]
@@ -205,6 +212,10 @@
                         (update-in [:where] conj
                                    '[?job :job/name ?job-name]
                                    '[(.contains ^String ?job-name ?job-name-condition)])
+                        (or (:since qmap) (:until qmap) (:exit-status qmap) (:batch-status qmap))
+                        (update-in [:find] conj
+                                   '?job-executions)
+
                         (or (:since qmap) (:until qmap) (:exit-status qmap) (:batch-status qmap))
                         (update-in [:where] conj
                                    '[?job :job/executions ?job-executions]
@@ -236,6 +247,7 @@
                       (:exit-status qmap "")
                       (:batch-status qmap ""))]
     (->> jobs
+         (filter #(if-let [e (second %)] (latest-executions e) true))
          (map #(->> (first %)
                     (d/pull datomic
                             '[:*
