@@ -39,55 +39,39 @@
 
 (deftest login
   (let [system (new-system config)
-        handler (partial  auth/login (:auth system))]
+        handler (auth/auth-resource (:auth system))]
     (testing "login success"
       (let [request {:request-method :post
-                     :params {:username "admin" :password "password123" :appname "default" :next "http://localhost:3000" :back "http://localhost:3000/login"}}
+                     :content-type "application/edn"
+                     :body (pr-str {:user/id "admin" :user/password "password123" :user/app-name "default"})}
             {:keys [status body session headers] :as res} (handler request)]
         (are [x y] (= x y)
-             302                                        status
-             "http://localhost:3000"                    (get-in headers ["Location"])
-             true                                       (-> body edn/read-string :token empty? not)
+             201  status
+             true (-> body edn/read-string :token empty? not)
              {:user/id "admin"
               :permissions #{:permission/update-job
                              :permission/read-job
                              :permission/create-job
                              :permission/delete-job
                              :permission/execute-job}} (:identity session))))
-    (testing "redirect back url is forbidden"
-      (let [request {:request-method :post
-                     :params {:username "admin" :password "password123" :appname "default" :next "http://localhost:3000" :back "http://forbidden:3000/login"}}
-            {:keys [status body session] :as res} (handler request)]
-        (are [x y] (= x y)
-             403                                         status
-             ["Redirect to specified url is forbidden."] (-> body edn/read-string)
-             nil                                         (:identity session))))
-    (testing "redirect next url is forbidden"
-      (let [request {:request-method :post
-                     :params {:username "admin" :password "password123" :appname "default" :next "http://forbidden:3000" :back "http://localhost:3000/login"}}
-            {:keys [status body session] :as res} (handler request)]
-        (are [x y] (= x y)
-             403                                         status
-             ["Redirect to specified url is forbidden."] (-> body edn/read-string)
-             nil                                         (:identity session))))
     (testing "login failure, lacking any patameter"
       (let [request {:request-method :post
-                     :params {:password "password123" :appname "default" :next "http://localhost:3000" :back "http://localhost:3000/login"}}
+                     :content-type "application/edn"
+                     :body (pr-str {:user/password "password123" :user/app-name "default"})}
             {:keys [status body session headers] :as res} (handler request)]
         (are [x y] (= x y)
-             302                                      status
-             "http://localhost:3000/login?error=true" (get-in headers ["Location"])
-             ["username must be present"]             (-> body edn/read-string)
-             nil                                      (:identity session))))
+             400                                status
+             {:messages ["id must be present"]} (-> body edn/read-string)
+             nil                                (:identity session))))
     (testing "login failure, authentification failure"
       (let [request {:request-method :post
-                     :params {:username "admin" :password "badpassword" :appname "default" :next "http://localhost:3000" :back "http://localhost:3000/login"}}
+                     :content-type "application/edn"
+                     :body (pr-str {:user/id "admin" :user/password "badpassword" :user/app-name "default"})}
             {:keys [status body session headers] :as res} (handler request)]
         (are [x y] (= x y)
-             302                                      status
-             "http://localhost:3000/login?error=true" (get-in headers ["Location"])
-             ["Autification failure."]                (-> body edn/read-string)
-             nil                                      (:identity session))))
+             201                                   status
+             {:messages ["Autification failure."]} (-> body edn/read-string)
+             nil                                   (:identity session))))
     (testing "login as created user"
       (let [request {:request-method :post
                      :content-type "application/edn"
@@ -95,7 +79,8 @@
             {:keys [status body]} (let [handler (auth/entry-resource (:auth system) nil)] (handler request))]
         (is (= 201 status)))
       (let [request {:request-method :post
-                     :params {:username "addeduser" :password "password123" :appname "default" :next "http://localhost:3000" :back "http://localhost:3000/login"}}
+                     :content-type "application/edn"
+                     :body (pr-str {:user/id "addeduser" :user/password "password123" :user/app-name "default"})}
             {:keys [status body session headers] :as res} (handler request)]
         (are [x y] (= x y)
              {:user/id                              "addeduser"
@@ -103,16 +88,14 @@
 
 (deftest logout
   (let [system (new-system config)
-        handler (partial auth/logout (:auth system))]
+        handler (auth/auth-resource (:auth system))]
     (testing "logout success"
-      (let [request {:request-method :get
-                     :identity {:user/id "admin"}
-                     :params {:next "http://localhost:3000/login"}}
+      (let [request {:request-method :delete
+                     :identity {:user/id "admin"}}
             {:keys [status session headers] :as res} (handler request)]
         (are [x y] (= x y)
-             302                           status
-             "http://localhost:3000/login" (get-in headers ["Location"])
-             nil                           (:identity session))))))
+             204 status
+             nil (:identity session))))))
 
 (deftest list-resource
   (let [system (new-system config)
