@@ -195,13 +195,7 @@
 
 (defn find-all [{:keys [datomic]} app-name query]
   (let [qmap (parse-query query)
-        latest-executions (->> (d/query datomic
-                                 '{:find [?job (max ?job-executions)]
-                                   :where [[?app :application/name ?app-name]
-                                           [?app :application/jobs ?job]
-                                           [?job :job/executions ?job-executions]]})
-                               (map second)
-                               set)
+        search-by-executions? (or (:since qmap) (:until qmap) (:exit-status qmap) (:batch-status qmap))
         base-query '{:find [?job]
                      :in [$ ?app-name [?job-name-condition ...] ?since-condition ?until-condition ?exit-status-condition ?batch-status-condition]
                      :where [[?app :application/name ?app-name]
@@ -212,18 +206,18 @@
                         (update-in [:where] conj
                                    '[?job :job/name ?job-name]
                                    '[(.contains ^String ?job-name ?job-name-condition)])
-                        (or (:since qmap) (:until qmap) (:exit-status qmap) (:batch-status qmap))
-                        (update-in [:find] conj
-                                   '?job-executions)
 
-                        (or (:since qmap) (:until qmap) (:exit-status qmap) (:batch-status qmap))
-                        (update-in [:where] conj
-                                   '[?job :job/executions ?job-executions]
-                                   '[?job-executions :job-execution/create-time ?create-time]
-                                   '[(max ?create-time)]
-                                   '[?job-executions :job-execution/exit-status ?exit-status]
-                                   '[?job-executions :job-execution/end-time ?end-time]
-                                   '[?job-executions :job-execution/start-time ?start-time])
+                        search-by-executions?
+                        (#(-> %
+                              (update-in [:find] conj
+                                         '?job-executions)
+                              (update-in [:where] conj
+                                         '[?job :job/executions ?job-executions]
+                                         '[?job-executions :job-execution/create-time ?create-time]
+                                         '[(max ?create-time)]
+                                         '[?job-executions :job-execution/exit-status ?exit-status]
+                                         '[?job-executions :job-execution/end-time ?end-time]
+                                         '[?job-executions :job-execution/start-time ?start-time])))
 
                         (:since qmap)
                         (update-in [:where] conj
@@ -245,9 +239,16 @@
                       (:since qmap "")
                       (:until qmap "")
                       (:exit-status qmap "")
-                      (:batch-status qmap ""))]
+                      (:batch-status qmap ""))
+        ;; Latest executions for earch jobs.
+        latest-executions (when search-by-executions?
+                            (->> (d/query datomic
+                                   '{:find [?job (max ?job-executions)]
+                                     :where [[?app :application/jobs ?job]
+                                             [?job :job/executions ?job-executions]]})
+                                 (map second) set))]
     (->> jobs
-         (filter #(if-let [e (second %)] (latest-executions e) true))
+         (filter #(if-let [ex (second %)] (latest-executions ex) true))
          (map #(->> (first %)
                     (d/pull datomic
                             '[:*
