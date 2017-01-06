@@ -97,16 +97,6 @@
         (log/infof "Signup %s as %s succeeded." (:user/id user) roll-name)
         result))))
 
-(defn login [{:keys [datomic token] :as component} username password appname]
-  (log/infof "Login attempt with parameters : %s." (pr-str {:username username :password "********" :appname appname}))
-  (if-let [user (auth-by-password datomic username password appname)]
-    (let [access-token (token/new-token token user)
-          _ (log/infof "Login attempt succeeded with access token : %s." access-token)]
-      (ring-response {:session {:identity (select-keys user [:user/id :permissions])}
-                      :body (pr-str {:token (str access-token)})}))
-    (do (log/info "Login attempt failed because of authentification failure.")
-      (ring-response {:body (pr-str ["Autification failure."])}))))
-
 (defn auth-resource
   [{:keys [datomic token] :as component}]
   (liberator/resource
@@ -122,13 +112,11 @@
                       (if-let [user (auth-by-password datomic id password app-name)]
                         (let [access-token (token/new-token token user)
                               _ (log/infof "Login attempt succeeded with access token : %s." access-token)]
-                          (ring-response {:status 200
-                                          ;; TODO: Research why ring session is not set.
-                                          :session {:identity (select-keys user [:user/id :permissions])}
+                          (ring-response {:session {:identity (select-keys user [:user/id :permissions])}
                                           :body (pr-str {:token (str access-token)})}))
                         (do (log/info "Login attempt failed because of authentification failure.")
                           (ring-response {:body (pr-str ["Autification failure."])}))))
-    :delete! (fn [_] (ring-response {:status 200 :session {}}))))
+    :handle-no-content (fn [_] (ring-response {:session {}}))))
 
 (defn list-resource
   [{:keys [datomic] :as component}]
