@@ -43,7 +43,7 @@
     (testing "login success"
       (let [request {:request-method :post
                      :content-type "application/edn"
-                     :body (pr-str {:user/id "admin" :user/password "password123" :user/app-name "default"})}
+                     :body (pr-str {:user/id "admin" :user/password "password123"})}
             {:keys [status body session headers] :as res} (handler request)]
         (are [x y] (= x y)
              201  status
@@ -57,7 +57,7 @@
     (testing "login failure, lacking any patameter"
       (let [request {:request-method :post
                      :content-type "application/edn"
-                     :body (pr-str {:user/password "password123" :user/app-name "default"})}
+                     :body (pr-str {:user/password "password123"})}
             {:keys [status body session headers] :as res} (handler request)]
         (are [x y] (= x y)
              400                                status
@@ -66,7 +66,7 @@
     (testing "login failure, authentification failure"
       (let [request {:request-method :post
                      :content-type "application/edn"
-                     :body (pr-str {:user/id "admin" :user/password "badpassword" :user/app-name "default"})}
+                     :body (pr-str {:user/id "admin" :user/password "badpassword"})}
             {:keys [status body session headers] :as res} (handler request)]
         (are [x y] (= x y)
              201                                   status
@@ -80,7 +80,7 @@
         (is (= 201 status)))
       (let [request {:request-method :post
                      :content-type "application/edn"
-                     :body (pr-str {:user/id "addeduser" :user/password "password123" :user/app-name "default"})}
+                     :body (pr-str {:user/id "addeduser" :user/password "password123"})}
             {:keys [status body session headers] :as res} (handler request)]
         (are [x y] (= x y)
              {:user/id                              "addeduser"

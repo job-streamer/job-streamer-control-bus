@@ -105,17 +105,17 @@
     :malformed? (fn [ctx]
                   (validate (parse-body ctx)
                             :user/id [v/required [v/matches #"^[\w\-]+$"]]
-                            :user/password [v/required [v/matches #"^[\w\-]+$"]]
-                            :user/app-name [v/required [v/matches #"^[\w\-]+$"]]))
-    :handle-created (fn [{{:keys [user/id user/password user/app-name]} :edn}]
-                      (log/infof "Login attempt with parameters : %s." (pr-str {:username id :password "********" :appname app-name}))
-                      (if-let [user (auth-by-password datomic id password app-name)]
-                        (let [access-token (token/new-token token user)
-                              _ (log/infof "Login attempt succeeded with access token : %s." access-token)]
-                          (ring-response {:session {:identity (select-keys user [:user/id :permissions])}
-                                          :body (pr-str {:token (str access-token)})}))
-                        (do (log/info "Login attempt failed because of authentification failure.")
-                          (ring-response {:body (pr-str {:messages ["Autification failure."]})}))))
+                            :user/password [v/required [v/matches #"^[\w\-]+$"]]))
+    :handle-created (fn [{{:keys [user/id user/password]} :edn}]
+                      (let [appname "default"]
+                        (log/infof "Login attempt with parameters : %s." (pr-str {:username id :password "********" :appname appname}))
+                        (if-let [user (auth-by-password datomic id password appname)]
+                          (let [access-token (token/new-token token user)
+                                _ (log/infof "Login attempt succeeded with access token : %s." access-token)]
+                            (ring-response {:session {:identity (select-keys user [:user/id :permissions])}
+                                            :body (pr-str {:token (str access-token)})}))
+                          (do (log/info "Login attempt failed because of authentification failure.")
+                            (ring-response {:body (pr-str {:messages ["Autification failure."]})})))))
     :handle-no-content (fn [_] (ring-response {:session {}}))))
 
 (defn list-resource
