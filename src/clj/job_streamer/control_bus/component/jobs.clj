@@ -457,9 +457,6 @@
                                         (conj datoms
                                               [:db/add [:application/name app-name] :application/jobs job-id])))
                           job-id))]
-                (d/transact datomic [{:db/id                 resolved-job-id
-                                      :job/bpmn-xml-notation (slurp (clojure.java.io/resource "job.bpmn.template"))
-                                      :job/svg-notation      (slurp (clojure.java.io/resource "job.svg.template"))}])
                 (doseq [notification (:job/status-notifications job)]
                   (save-status-notification jobs resolved-job-id notification))
                 (when-let [schedule (:job/schedule job)]
@@ -548,36 +545,6 @@
                        :job/next-execution   (find-next-execution jobs job)
                        :job/dynamic-parameters (extract-job-parameters job))
                      (dissoc :job/executions))))))
-
-(defn bpmn-resource [{:keys [datomic scheduler] :as jobs} app-name job-name]
-  (liberator/resource
-   :available-media-types ["application/edn" "application/json"]
-   :allowed-methods [:get :post]
-   :malformed? #(parse-body %) ;; TODO: Validate xml format.
-   :exists? (when-let [[app-id job-id] (find-by-name jobs app-name job-name)]
-              {:app-id app-id
-               :job-id job-id})
-   :allowed? (fn [{{:keys [request-method identity]} :request}]
-               (let [permissions (:permissions identity)]
-                 (condp = request-method
-                   :get (:permission/read-job permissions)
-                   :post (:permission/create-job permissions)
-                   false)))
-   :post! (fn [{job :edn posted-job-id :job-id}]
-            (let [datoms (as-> job $
-                              (xml->edn (:job/bpmn-xml-notation $) $ job-name)
-                              (edn->datoms $ posted-job-id))
-                  job-id (:db/id (first datoms))]
-              (d/transact datomic
-                          (conj datoms
-                                [:db/add [:application/name app-name] :application/jobs job-id]))))
-    :handle-ok (fn [ctx]
-                ;; TODO: implement.
-               (let [job (d/pull datomic
-                                 '[:job/bpmn-xml-notation :job/svg-notation]
-                                 (:job-id ctx))]
-                 (println job)
-                 job))))
 
 (defn job-settings-resource [{:keys [datomic] :as jobs} app-name job-name & [cmd]]
   (liberator/resource
