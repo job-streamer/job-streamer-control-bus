@@ -5,7 +5,7 @@
             [clojure.tools.logging :as log]
             [compojure.core :refer [ANY GET POST routes]]
             [bouncer.validators :as v]
-            [ring.util.response :refer [content-type resource-response]]
+            [ring.util.response :refer [content-type]]
             (job-streamer.control-bus.component
              [apps :as apps]
              [jobs :as jobs]

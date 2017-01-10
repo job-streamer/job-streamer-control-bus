@@ -14,7 +14,7 @@
             [ring.util.response :refer [response content-type header]]
             (job-streamer.control-bus [notification :as notification]
                                       [validation :refer [validate]]
-                                      [util :refer [parse-body edn->datoms to-int xml->edn]])
+                                      [util :refer [parse-body edn->datoms to-int]])
             (job-streamer.control-bus.component [datomic :as d]
                                                 [agents  :as ag]
                                                 [scheduler :as scheduler]))
@@ -545,6 +545,7 @@
                        :job/next-execution   (find-next-execution jobs job)
                        :job/dynamic-parameters (extract-job-parameters job))
                      (dissoc :job/executions))))))
+
 
 (defn job-settings-resource [{:keys [datomic] :as jobs} app-name job-name & [cmd]]
   (liberator/resource

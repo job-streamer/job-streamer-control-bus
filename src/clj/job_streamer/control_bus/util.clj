@@ -117,15 +117,11 @@
 
 (defn xml->edn
   "Convert a format from XML to edn."
-  ([xml]
-   (let [doc (Jsoup/parse xml)
-         job (. doc select "job")]
-     {:job/name (.attr job "id")
-      :job/components (xml->components job)}))
-  ([xml job job-name]
-   (merge job {:job/name job-name
-               :job/components []
-               :job/properties []})))
+  [xml]
+  (let [doc (Jsoup/parse xml)
+        job (. doc select "job")]
+    {:job/name (.attr job "id")
+     :job/components (xml->components job)}))
 
 (defn- body-as-string [ctx]
   (if-let [body (get-in ctx [:request :body])]
