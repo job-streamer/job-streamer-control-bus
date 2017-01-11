@@ -42,12 +42,13 @@
 
 (defn setup-execution [{:keys [datomic] :as jobs}
                        {:keys [job-execution/start-time db/id job-execution/end-time
-                               job-execution/create-time job-execution/batch-status]
-                        :or {
-                             job-execution/start-time (java.util.Date.)
+                               job-execution/create-time job-execution/batch-status
+                               job-execution/exit-status]
+                        :or {job-execution/start-time (java.util.Date.)
                              job-execution/end-time (java.util.Date.)
                              job-execution/create-time (java.util.Date.)
-                             job-execution/batch-status :batch-status/undispatched}}]
+                             job-execution/batch-status :batch-status/undispatched
+                             job-execution/exit-status "COMPLETED"}}]
   (let [execution-id (d/tempid :db.part/user)]
     (-> (d/transact
          datomic
@@ -56,7 +57,7 @@
            :job-execution/create-time create-time
            :job-execution/end-time end-time
            :job-execution/start-time start-time
-           :job-execution/exit-status "COMPLETED"
+           :job-execution/exit-status exit-status
            :job-execution/job-parameters "{}"}
           [:db/add id :job/executions execution-id]])
         :tempids)))
@@ -212,7 +213,25 @@
       (testing "batch-status"
         (let [res (jobs/find-all (:jobs system) "default" "batch-status:undispatched")]
           (is (= 1 (count res)))
-          (is (= "job1" (->> res first :job/name))))))))
+          (is (= "job1" (->> res first :job/name)))))
+      ;; Setup one more execution.
+      (let [create-time (.toDate (f/parse (:date f/formatters) "2016-09-11"))
+            start-time (.toDate (f/parse (:date f/formatters) "2016-09-12"))
+            end-time (.toDate (f/parse (:date f/formatters) "2016-09-13"))
+            exit-status "FAILED"]
+        (setup-execution (:jobs system)
+                         {:db/id job-id
+                          :job-execution/end-time end-time
+                          :job-execution/start-time start-time
+                          :job-execution/create-time create-time
+                          :job-execution/exit-status exit-status})
+        (testing "exit-status: search only latest execution and not found"
+          (let [res (jobs/find-all (:jobs system) "default" "exit-status:COMPLETED")]
+            (is (= 0 (count res)))))
+        (testing "exit-status: search only latest execution and found"
+          (let [res (jobs/find-all (:jobs system) "default" "exit-status:FAILED")]
+            (is (= 1 (count res)))
+            (is (= "job1"  (->> res first :job/name)))))))))
 
 (deftest find-all-with-sort
   (let [system (new-system config)
