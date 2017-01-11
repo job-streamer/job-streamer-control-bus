@@ -23,6 +23,8 @@
             [restartable? :boolean]
             [steps :ref :many]
             [edn-notation :string]
+            [bpmn-xml-notation :string]
+            [svg-notation :string]
             [schedule :ref]
             [exclusive? :boolean]
             [time-monitor :ref]
