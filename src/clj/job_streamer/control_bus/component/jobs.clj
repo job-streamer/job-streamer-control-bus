@@ -646,7 +646,7 @@
 (defn executions-resource [{:keys [datomic] :as jobs} app-name job-name]
   (liberator/resource
    :available-media-types ["application/edn" "application/json"]
-   :allowed-methods [:get :post]
+   :allowed-methods [:get :post :delete]
    :malformed? #(parse-body %)
    :exists? (when-let [[app-id job-id] (find-by-name jobs app-name job-name)]
               {:job (d/pull datomic
@@ -676,9 +676,14 @@
                  (condp = request-method
                    :get (:permission/read-job permissions)
                    :post (:permission/execute-job permissions)
+                   :delete (:permission/delete-job permissions)
                    false)))
-   :put!  #(execute-job jobs app-name job-name %)
    :post! #(execute-job jobs app-name job-name %)
+   :delete! (fn [ctx]
+              (doall
+                (map #(d/transact datomic
+                       [[:db.fn/retractEntity (:db/id %)]])
+                     (:results (find-executions jobs app-name job-name 0 Integer/MAX_VALUE)))))
    :handle-ok (fn [{{{:keys [offset limit]} :params} :request}]
                 (find-executions jobs app-name job-name
                                  (to-int offset 0)
