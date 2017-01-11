@@ -119,6 +119,7 @@
                                   (d/pull datomic '[:*]))
                       builtins {:batch-component/batchlet
                                 ["org.jobstreamer.batch.ShellBatchlet"]
+                                ["org.jobstreamer.batch.JavaMainBatchlet"]
 
                                 :batch-component/item-writer []
                                 :batch-component/item-processor []
