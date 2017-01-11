@@ -69,7 +69,7 @@
                      :body (pr-str {:user/id "admin" :user/password "badpassword"})}
             {:keys [status body session headers] :as res} (handler request)]
         (are [x y] (= x y)
-             201                                   status
+             401                                   status
              {:messages ["Autification failure."]} (-> body edn/read-string)
              nil                                   (:identity session))))
     (testing "login as created user"
