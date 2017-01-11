@@ -8,7 +8,8 @@
             [bouncer.core :as b]
             [bouncer.validators :as v]
             (job-streamer.control-bus [util :refer [parse-body]])
-            (job-streamer.control-bus.component [datomic :as d]))
+            (job-streamer.control-bus.component [datomic :as d]
+                                                [token :as token]))
   (:import [net.unit8.job_streamer.control_bus JobStreamerExecuteJob TimeKeeperJob HolidayAndWeeklyCalendar]
            (org.quartz TriggerBuilder JobBuilder CronScheduleBuilder DateBuilder DateBuilder$IntervalUnit
                        TriggerKey TriggerUtils CronExpression
@@ -23,7 +24,7 @@
       (.modifiedByCalendar builder calendar-name))
     (.build builder)))
 
-(defn time-keeper [{:keys [scheduler datomic host port]}
+(defn time-keeper [{:keys [scheduler datomic token host port]}
                    execution-id duration action]
   (let [[app-name job-name] (d/query datomic
                                      '{:find [[?app-name ?job-name]]
@@ -35,6 +36,7 @@
         trigger (.. (TriggerBuilder/newTrigger)
                     (startAt (DateBuilder/futureDate duration DateBuilder$IntervalUnit/MINUTE))
                     (build))
+        access-token (token/new-token token {:permissions #{:permission/execute-job}})
         job-deail (.. (JobBuilder/newJob)
                       (ofType TimeKeeperJob)
                       (withIdentity (str "time-keeper-" execution-id))
@@ -44,10 +46,11 @@
                       (usingJobData "command" (name action))
                       (usingJobData "host" host)
                       (usingJobData "port" port)
+                      (usingJobData "token" (str access-token))
                       (build))]
     (.scheduleJob scheduler job-deail trigger)))
 
-(defn schedule [{:keys [datomic scheduler host port]} job-id cron-notation calendar-name]
+(defn schedule [{:keys [datomic scheduler token host port]} job-id cron-notation calendar-name]
   (let [new-trigger (make-trigger job-id cron-notation calendar-name)
         job (d/pull datomic
                     '[:job/name
@@ -59,6 +62,7 @@
                             :in [$ ?job-id]
                             :where [[?app :application/name ?app-name]
                                     [?app :application/jobs ?job-id]]} job-id)
+        access-token (token/new-token token {:permissions #{:permission/execute-job}})
         job-detail (.. (JobBuilder/newJob)
                        (ofType JobStreamerExecuteJob)
                        (withIdentity (str "job-" job-id))
@@ -66,6 +70,7 @@
                        (usingJobData "job-name" (:job/name job))
                        (usingJobData "host" host)
                        (usingJobData "port" port)
+                       (usingJobData "token" (str access-token))
                        (build))]
     (if-let [trigger (.getTrigger scheduler (TriggerKey. (str "trigger-" job-id)))]
       (do

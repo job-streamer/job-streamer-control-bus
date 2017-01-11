@@ -22,6 +22,7 @@ public class JobStreamerExecuteJob implements Job {
         String host = data.getString("host");
         long port = data.getLong("port");
         String appName = data.getString("app-name");
+        String token = data.getString("token");
 
         URLConnection conn;
         try {
@@ -34,6 +35,7 @@ public class JobStreamerExecuteJob implements Job {
             conn.setReadTimeout(5000);
             conn.setConnectTimeout(1000);
             ((HttpURLConnection) conn).setRequestMethod("POST");
+            ((HttpURLConnection) conn).setRequestProperty("Authorization", "Token " + token);
             conn.connect();
             int statusCode = ((HttpURLConnection) conn).getResponseCode();
             if (statusCode != HttpURLConnection.HTTP_CREATED) {
