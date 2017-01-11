@@ -23,7 +23,7 @@ public class TimeKeeperJob implements Job {
         String command = data.getString("command");
 
         String host = data.getString("host");
-        int port = data.getInt("port");
+        long port = data.getLong("port");
         String token = data.getString("token");
 
         URLConnection conn;
