@@ -45,7 +45,7 @@
                       (usingJobData "execution-id" execution-id)
                       (usingJobData "command" (name action))
                       (usingJobData "host" host)
-                      (usingJobData "port" port)
+                      (usingJobData "port" (long port))
                       (usingJobData "token" (str access-token))
                       (build))]
     (.scheduleJob scheduler job-deail trigger)))
@@ -69,7 +69,7 @@
                        (usingJobData "app-name" app-name)
                        (usingJobData "job-name" (:job/name job))
                        (usingJobData "host" host)
-                       (usingJobData "port" port)
+                       (usingJobData "port" (long port))
                        (usingJobData "token" (str access-token))
                        (build))]
     (if-let [trigger (.getTrigger scheduler (TriggerKey. (str "trigger-" job-id)))]
