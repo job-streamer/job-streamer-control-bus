@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:jsr352="http://jsr352/" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn">
+  <jsr352:job id="Job_1" bpmn:name="JOB1" isExecutable="false">
+    <bpmn:extensionElements>
+      <camunda:properties>
+        <camunda:property name="A" value="1" />
+      </camunda:properties>
+    </bpmn:extensionElements>
+    <jsr352:start id="Start_1">
+      <bpmn:outgoing>Transition_159j5e4</bpmn:outgoing>
+    </jsr352:start>
+    <jsr352:step id="Step_1r9icno" name="Step1">
+      <bpmn:extensionElements>
+        <camunda:properties>
+          <camunda:property name="B" value="2" />
+        </camunda:properties>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Transition_159j5e4</bpmn:incoming>
+      <bpmn:outgoing>Transition_1t60wky</bpmn:outgoing>
+      <bpmn:outgoing>Transition_15t996a</bpmn:outgoing>
+      <jsr352:chunk id="Chunk_0fq8yny">
+        <jsr352:reader id="Reader_1aqcjty" ref="READER1" />
+        <jsr352:processor id="Processor_12g0xgh" ref="PROCESSOR1">
+          <bpmn:extensionElements>
+            <camunda:properties>
+              <camunda:property name="T" value="23" />
+            </camunda:properties>
+          </bpmn:extensionElements>
+        </jsr352:processor>
+        <jsr352:writer id="Writer_15nlkzd" ref="WRITER1">
+          <bpmn:extensionElements>
+            <camunda:properties>
+              <camunda:property name="W" value="EEE" />
+            </camunda:properties>
+          </bpmn:extensionElements>
+        </jsr352:writer>
+      </jsr352:chunk>
+    </jsr352:step>
+    <jsr352:transition id="Transition_159j5e4" sourceRef="Start_1" targetRef="Step_1r9icno" />
+    <jsr352:flow id="Flow_0okh5l9">
+      <bpmn:incoming>Transition_1t60wky</bpmn:incoming>
+      <bpmn:outgoing>Transition_0w6m4xt</bpmn:outgoing>
+      <bpmn:outgoing>Transition_1noh50a</bpmn:outgoing>
+      <jsr352:step id="Step_18blha2">
+        <jsr352:batchlet id="Batchlet_1aju50o" ref="Batchlet1" />
+      </jsr352:step>
+    </jsr352:flow>
+    <jsr352:transition id="Transition_1t60wky" sourceRef="Step_1r9icno" targetRef="Flow_0okh5l9" />
+    <jsr352:end id="End_07bch6u">
+      <bpmn:incoming>Transition_0w6m4xt</bpmn:incoming>
+    </jsr352:end>
+    <jsr352:transition id="Transition_0w6m4xt" sourceRef="Flow_0okh5l9" targetRef="End_07bch6u" />
+    <jsr352:fail id="Fail_1vaqx0t">
+      <bpmn:incoming>Transition_15t996a</bpmn:incoming>
+    </jsr352:fail>
+    <jsr352:transition id="Transition_15t996a" name="ERROR1" sourceRef="Step_1r9icno" targetRef="Fail_1vaqx0t" on="ERROR1" />
+    <jsr352:stop id="Stop_0fivxe9">
+      <bpmn:incoming>Transition_1noh50a</bpmn:incoming>
+    </jsr352:stop>
+    <jsr352:transition id="Transition_1noh50a" name="ORRE2" sourceRef="Flow_0okh5l9" targetRef="Stop_0fivxe9" on="ORRE2" />
+  </jsr352:job>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Job_1">
+      <bpmndi:BPMNShape id="_BPMNShape_Start_2" bpmnElement="Start_1">
+        <dc:Bounds x="173" y="102" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Step_1r9icno_di" bpmnElement="Step_1r9icno" isExpanded="true">
+        <dc:Bounds x="414" y="25" width="451" height="294" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Transition_159j5e4_di" bpmnElement="Transition_159j5e4">
+        <di:waypoint xsi:type="dc:Point" x="213" y="122" />
+        <di:waypoint xsi:type="dc:Point" x="310" y="122" />
+        <di:waypoint xsi:type="dc:Point" x="310" y="172" />
+        <di:waypoint xsi:type="dc:Point" x="414" y="172" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="325" y="147" width="0" height="0" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="Chunk_0fq8yny_di" bpmnElement="Chunk_0fq8yny">
+        <dc:Bounds x="441" y="91" width="381" height="143" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Reader_1aqcjty_di" bpmnElement="Reader_1aqcjty">
+        <dc:Bounds x="459" y="113" width="80" height="60" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Processor_12g0xgh_di" bpmnElement="Processor_12g0xgh">
+        <dc:Bounds x="549" y="113" width="80" height="60" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Writer_15nlkzd_di" bpmnElement="Writer_15nlkzd">
+        <dc:Bounds x="640" y="113" width="80" height="60" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Flow_0okh5l9_di" bpmnElement="Flow_0okh5l9">
+        <dc:Bounds x="895" y="29" width="255" height="227" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Transition_1t60wky_di" bpmnElement="Transition_1t60wky">
+        <di:waypoint xsi:type="dc:Point" x="865" y="172" />
+        <di:waypoint xsi:type="dc:Point" x="880" y="172" />
+        <di:waypoint xsi:type="dc:Point" x="880" y="179" />
+        <di:waypoint xsi:type="dc:Point" x="895" y="179" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="895" y="175.5" width="0" height="0" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="End_07bch6u_di" bpmnElement="End_07bch6u" isExpanded="true">
+        <dc:Bounds x="1374" y="94" width="40" height="40" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1394" y="134" width="0" height="0" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Transition_0w6m4xt_di" bpmnElement="Transition_0w6m4xt">
+        <di:waypoint xsi:type="dc:Point" x="1150" y="143" />
+        <di:waypoint xsi:type="dc:Point" x="1260" y="143" />
+        <di:waypoint xsi:type="dc:Point" x="1260" y="114" />
+        <di:waypoint xsi:type="dc:Point" x="1374" y="114" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1275" y="128.5" width="0" height="0" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="Fail_1vaqx0t_di" bpmnElement="Fail_1vaqx0t" isExpanded="true">
+        <dc:Bounds x="620" y="409" width="40" height="40" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="640" y="449" width="0" height="0" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Transition_15t996a_di" bpmnElement="Transition_15t996a">
+        <di:waypoint xsi:type="dc:Point" x="640" y="319" />
+        <di:waypoint xsi:type="dc:Point" x="640" y="409" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="634" y="354" width="42" height="17" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="Stop_0fivxe9_di" bpmnElement="Stop_0fivxe9" isExpanded="true">
+        <dc:Bounds x="1032" y="463" width="40" height="40" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1052" y="503" width="0" height="0" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Transition_1noh50a_di" bpmnElement="Transition_1noh50a">
+        <di:waypoint xsi:type="dc:Point" x="1023" y="256" />
+        <di:waypoint xsi:type="dc:Point" x="1023" y="353" />
+        <di:waypoint xsi:type="dc:Point" x="1052" y="353" />
+        <di:waypoint xsi:type="dc:Point" x="1052" y="463" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1020" y="294.87897503895755" width="35" height="17" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="Step_18blha2_di" bpmnElement="Step_18blha2">
+        <dc:Bounds x="915" y="49" width="165" height="144" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Batchlet_1aju50o_di" bpmnElement="Batchlet_1aju50o">
+        <dc:Bounds x="956" y="89" width="100" height="80" />
+      </bpmndi:BPMNShape>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

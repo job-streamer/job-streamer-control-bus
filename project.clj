@@ -14,7 +14,7 @@
                  [io.undertow/undertow-websockets-jsr "1.3.22.Final"]
                  [com.datomic/datomic-free "0.9.5394" :exclusions [org.slf4j/slf4j-api org.slf4j/slf4j-nop
                                                                    com.amazonaws/aws-java-sdk]]
-                 [org.jsoup/jsoup "1.9.2"]
+                 [org.jsoup/jsoup "1.10.2"]
                  [org.clojure/data.json "0.2.6"]
                  [datomic-schema "1.3.0"]
                  [liberator "0.14.1"]
