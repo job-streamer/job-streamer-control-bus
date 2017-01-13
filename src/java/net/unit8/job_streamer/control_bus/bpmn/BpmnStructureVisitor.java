@@ -3,6 +3,7 @@ package net.unit8.job_streamer.control_bus.bpmn;
 import org.jsoup.nodes.Element;
 import org.jsoup.nodes.Node;
 import org.jsoup.parser.Tag;
+import org.jsoup.select.Elements;
 import org.jsoup.select.NodeVisitor;
 
 import java.util.Arrays;
@@ -11,7 +12,7 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Created by kawasima on 17/01/10.
+ * @author kawasima
  */
 public class BpmnStructureVisitor implements NodeVisitor {
     private static final Set<String> TARGET_TAGS = new HashSet<>(
@@ -36,13 +37,29 @@ public class BpmnStructureVisitor implements NodeVisitor {
     }
 
     private void parseProperties(Element bpmnEl, Element jobEl) {
-        Element properties = jobEl.appendElement("properties");
-        for (Element property : bpmnEl.select("> bpmn|extensionElements camunda|property")) {
-            properties.appendElement("property")
+        Elements properties = bpmnEl.select("> bpmn|extensionElements camunda|property");
+        if (properties.isEmpty()) return;
+
+        Element propertiesEl = jobEl.appendElement("properties");
+        for (Element property : properties) {
+            propertiesEl.appendElement("property")
                     .attr("name",  property.attr("name"))
                     .attr("value", property.attr("value"));
         }
     }
+
+    private void parseListeners(Element bpmnEl, Element jobEl) {
+        Elements listeners = bpmnEl.select("> jsr352|listener");
+        if (listeners.isEmpty()) return;
+
+        Element listenersEL = jobEl.appendElement("listeners");
+        for (Element listener : listeners) {
+            Element listenerEl = listenersEL.appendElement("listener")
+                    .attr("ref",  listener.attr("ref"));
+            parseProperties(listener, listenerEl);
+        }
+    }
+
     private void parseTransition(Element bpmnEl, Element jobEl) {
         for (Element outgoing : bpmnEl.select("bpmn|outgoing")) {
             Element transition = transitions.get(outgoing.text().trim());
@@ -103,15 +120,19 @@ public class BpmnStructureVisitor implements NodeVisitor {
                 break;
             case "jsr352:step":
                 el = current.appendElement("step");
-                el.attr("id", node.attr("name"));
+                el.attr("id", or(
+                        node.attr("name"),
+                        node.attr("id")
+                ));
                 copyAttribute(el, (Element) node, "start-limit");
                 copyAttribute(el, (Element) node, "allow-start-if-complete");
                 parseProperties((Element) node, el);
+                parseListeners((Element) node, el);
                 parseTransition((Element) node, el);
                 current = el;
                 break;
 
-            case "jsr352:chuk":
+            case "jsr352:chunk":
                 el = current.appendElement("chunk");
                 copyAttribute(el, (Element) node, "checkpoint-policy");
                 copyAttribute(el, (Element) node, "item-count");
@@ -122,14 +143,20 @@ public class BpmnStructureVisitor implements NodeVisitor {
                 current = el;
                 break;
             case "jsr352:flow":
-                el = new Element(Tag.valueOf("flow"), "");
-                el.attr("id", node.attr("name"));
+                el = current.appendElement("flow")
+                        .attr("id", or(
+                                node.attr("name"),
+                                node.attr("id")
+                        ));
                 current.appendChild(el);
                 current = el;
                 break;
             case "jsr352:split":
-                el = new Element(Tag.valueOf("split"), "");
-                el.attr("id", node.attr("name"));
+                el = current.appendElement("split")
+                        .attr("id", or(
+                                node.attr("name"),
+                                node.attr("id")
+                        ));
                 current.appendChild(el);
                 current = el;
                 break;
@@ -170,5 +197,13 @@ public class BpmnStructureVisitor implements NodeVisitor {
         if (TARGET_TAGS.contains(node.nodeName())) {
             current = current.parent();
         }
+    }
+
+    private String or(String... args) {
+        for(String arg : args) {
+            if (arg != null && !arg.isEmpty())
+                return arg;
+        }
+        return null;
     }
 }
