@@ -18,29 +18,12 @@
   "Convert a format from EDN to datom."
   [job job-id]
   (let [datoms (atom [])
-        step-refs (doall
-                   (for [step (->> (:job/components job)
-                                   (filter #(find % :step/name)))]
-                       (let [id (d/tempid :db.part/user)]
-                         (swap! datoms conj
-                                (merge
-                                 {:db/id id
-                                  :step/name (:step/name step)
-                                  :step/start-limit (get job :step/start-limit 0)
-                                  :step/allow-start-if-complete? (get job :step/allow-start-if-complete? false)}
-                                 (when-let [batchlet (:step/batchlet step)]
-                                   (let [batchlet-id (d/tempid :db.part/user)]
-                                     (swap! datoms conj {:db/id batchlet-id :batchlet/ref (:batchlet/ref batchlet)})
-                                     {:step/batchlet batchlet-id}))))
-                         id)))
+        step-names [""]
         job-id (or job-id (d/tempid :db.part/user)) ]
     (concat [{:db/id job-id
               :job/name (:job/name job)
-              :job/restartable? (get job :job/restartable? true)
-              :job/edn-notation (pr-str job)
               :job/svg-notation (get job :job/svg-notation "")
               :job/bpmn-xml-notation (get job :job/bpmn-xml-notation "")
-              :job/steps step-refs
               :job/exclusive? (get job :job/exclusive? false)}]
             (when-let [time-monitor (:job/time-monitor job)]
               [(assoc time-monitor :db/id #db/id[db.part/user -1])

@@ -25,20 +25,13 @@
                                        {:keys [id execution-id step-execution-id
                                                step-name instance-id]} ch]
   (log/debug "start-step" step-name execution-id step-execution-id)
-  (if-let [step (datomic/query datomic
-                               '{:find [?step .]
-                                 :in [$ ?id ?step-name]
-                                 :where [[?job :job/executions ?id]
-                                         [?job :job/steps ?step]
-                                         [?step :step/name ?step-name]]}
-                               id step-name)]
-    (datomic/transact datomic
-                      [{:db/id #db/id[db.part/user -1]
-                        :step-execution/step step
-                        :step-execution/step-execution-id step-execution-id
-                        :step-execution/batch-status :batch-status/starting}
-                       [:db/add id
-                        :job-execution/step-executions  #db/id[db.part/user -1]]])))
+  (datomic/transact datomic
+                    [{:db/id #db/id[db.part/user -1]
+                      :step-execution/step-name step-name
+                      :step-execution/step-execution-id step-execution-id
+                      :step-execution/batch-status :batch-status/starting}
+                     [:db/add id
+                      :job-execution/step-executions  #db/id[db.part/user -1]]]))
 
 (defmethod handle-command :progress-step [{:keys [agents jobs datomic]}
                                           {:keys [id execution-id step-execution-id
@@ -47,7 +40,7 @@
    (ag/find-agent-by-channel agents ch)
    execution-id
    step-execution-id
-   
+
    :on-success
    (fn [step-execution]
      (if-let [id (job/find-step-execution jobs instance-id step-execution-id)]

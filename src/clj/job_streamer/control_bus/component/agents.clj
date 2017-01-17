@@ -66,7 +66,7 @@
                       (dissoc :agent/channel))))))
 
 (defn execute-job [agt execution-request & {:keys [on-error on-success]}]
-    (log/info (pr-str execution-request))
+    (log/info "execution request"(pr-str execution-request))
     (http/post (str "http://" (:agent/host agt) ":" (:agent/port agt) "/jobs")
                {:body (pr-str execution-request)
                 :headers {"Content-Type" "application/edn"}}

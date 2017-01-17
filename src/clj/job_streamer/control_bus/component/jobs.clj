@@ -38,7 +38,7 @@
       {:job-execution/start-time next-start})))
 
 (defn extract-job-parameters [job]
-  (->> (edn/read-string (:job/edn-notation job))
+  (->> (edn/read-string (:job/bpmn-xml-notation job))
        (tree-seq coll? seq)
        (filter #(and (vector? %)
                      (keyword? (first %))
@@ -60,10 +60,9 @@
    '{:find [?job-execution ?job-obj ?param-map]
      :where [[?job :job/executions ?job-execution]
              [?job-execution :job-execution/job-parameters ?parameter]
-             [?job :job/edn-notation ?edn-notation]
+             [?job :job/bpmn-xml-notation ?job-obj]
              (or [?job-execution :job-execution/batch-status :batch-status/undispatched]
                  [?job-execution :job-execution/batch-status :batch-status/unrestarted])
-             [(clojure.edn/read-string ?edn-notation) ?job-obj]
              [(clojure.edn/read-string ?parameter) ?param-map]]}))
 
 (defn find-by-name [{:keys [datomic]} app-name job-name]
@@ -308,7 +307,7 @@
                      {:job-execution/step-executions
                       [:*
                        {:step-execution/batch-status [:db/ident]}
-                       {:step-execution/step [:step/name]}]}] job-execution)]
+                       :step-execution/step-name]}] job-execution)]
     (update-in je [:job-execution/step-executions]
                #(map (fn [step-execution]
                        (assoc step-execution
@@ -338,7 +337,6 @@
   (log/debug "progress update: " id execution)
   (let [job (d/query datomic
                      '{:find [(pull ?job [:job/name
-                                          {:job/steps [:step/name]}
                                           {:job/status-notifications
                                            [{:status-notification/batch-status [:db/ident]}
                                             :status-notification/exit-status
@@ -412,7 +410,8 @@
                      (when (with-params :schedule)
                        {:job/schedule schedule})
                      (when (with-params :notation)
-                       {:job/edn-notation (:job/edn-notation job)})
+                       {:job/bpmn-xml-notation (:job/bpmn-xml-notation job)
+                        :job/svg-notation (:job/svg-notation job)})
                      (when (with-params :settings)
                        (merge {:job/exclusive? (get job :job/exclusive? false)}
                               (when-let [time-monitor (get-in job [:job/time-monitor :db/id])]
