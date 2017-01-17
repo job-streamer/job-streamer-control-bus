@@ -68,12 +68,11 @@
     (when-let [_ (<! submitter-ch)]
       (let [undispatched (jobs/find-undispatched jobs)]
         (doseq [[execution-request job-bpmn-xml parameter] undispatched]
-          (println (some-> (new BpmnParser) (.parse job-bpmn-xml) .toString))
           (submit dispatcher
                   {:request-id execution-request
                    :class-loader-id (:application/class-loader-id
                                      (apps/find-by-name apps "default"))
-                   :job (some-> (new BpmnParser) (.parse job-bpmn-xml) .toString)
+                   :job (str "<?xml version=\"1.0\" encoding=\"UTF-8\"?> " \newline (some-> (new BpmnParser) (.parse job-bpmn-xml) .toString))
                    :restart? (= (some-> (d/pull datomic
                                                 '[:job-execution/batch-status]
                                                 execution-request)

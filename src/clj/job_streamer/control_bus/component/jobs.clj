@@ -359,7 +359,7 @@
                         {:job-execution/start-time start-time})
                       (when-let [end-time (:end-time execution)]
                         {:job-execution/end-time end-time})
-                      (when-let [step-executions (and (empty?  (d/query datomic
+                      (when-let [step-executions (and (empty? (d/query datomic
                                                                         '{:find [?step-executions]
                                                                           :in [$]
                                                                           :where [[?step-executions :job-execution/step-executions ?job-execution-id]]} id))
@@ -367,7 +367,7 @@
                         {:job-execution/step-executions (map (fn [m]
                                                                (->> m
                                                                     (map #(vector (keyword "step-execution" (name (key %))) (val %)))
-                                                                    (into {:db/id #db/id[:db.part/user -1]})))
+                                                                    (into {:db/id (d/tempid :db.part/user)})))
                                                              step-executions)}))]))
 
 (defn save-status-notification

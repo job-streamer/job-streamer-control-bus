@@ -113,7 +113,8 @@ public class BpmnStructureVisitor implements NodeVisitor {
         switch(node.nodeName()) {
             case "jsr352:job":
                 el = new Element(Tag.valueOf("job"), "");
-                el.attr("name", node.attr("name"));
+                el.attr("id", or(
+                        node.attr("name"),node.attr("bpmn:name")));
                 parseProperties((Element) node, el);
                 current.appendChild(el);
                 current = el;
