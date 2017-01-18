@@ -14,8 +14,7 @@
             [job-streamer.control-bus.system :as system]))
 
 (def dev-config
-  {:app {:middleware [[wrap-stacktrace :stacktrace]]}
-   :datomic {:uri "datomic:mem://jobstreamer"}})
+  {:app {:middleware [[wrap-stacktrace :stacktrace]]}})
 
 (def config
   (meta-merge config/defaults

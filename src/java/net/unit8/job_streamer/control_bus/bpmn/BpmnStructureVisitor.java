@@ -90,7 +90,7 @@ public class BpmnStructureVisitor implements NodeVisitor {
             } else if (batchComponents.containsKey(targetRef)) {
                 Element nextEl = jobEl.appendElement("next");
                 nextEl.attr("on", on);
-                nextEl.attr("to", batchComponents.get(targetRef).attr("name"));
+                nextEl.attr("to", or(batchComponents.get(targetRef).attr("name"),batchComponents.get(targetRef).attr("id")));
             }
         }
     }
