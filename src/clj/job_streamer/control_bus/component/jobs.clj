@@ -18,7 +18,10 @@
             (job-streamer.control-bus.component [datomic :as d]
                                                 [agents  :as ag]
                                                 [scheduler :as scheduler]))
-  (:import [java.util Date]))
+  (:import [java.util Date])
+  (:import  [org.jsoup Jsoup]
+           [org.jsoup.nodes Element Node]
+           [org.jsoup.parser Tag Parser]))
 
 (defn find-latest-execution
   "Find latest from given executions."
@@ -38,21 +41,15 @@
       {:job-execution/start-time next-start})))
 
 (defn extract-job-parameters [job]
-  (->> (edn/read-string (:job/bpmn-xml-notation job))
-       (tree-seq coll? seq)
-       (filter #(and (vector? %)
-                     (keyword? (first %))
-                     (= (name (first %)) "properties")
-                     (map? (second %))))
-       (map #(->> (second %)
-                  (vals)
-                  (map (fn [v] (->> (re-seq #"#\{([^\}]+)\}" v)
-                                    (map second))))))
-       (flatten)
-       (map #(->> (re-seq #"jobParameters\['(\w+)'\]" %)
-                  (map second)))
-       (flatten)
-       (apply hash-set)))
+  (when-let [bpmn (:bpmn-xml-notation job)]
+    (let [jobxml (Jsoup/parse bpmn "" (Parser/xmlParser))
+          dynamic-properties (.select jobxml "jsr352|job > bpmn|extensionElements > camunda|properties > camunda|property[value~=#\\{jobParameters\\['[\\w\\-]+'\\]\\}]")]
+      (doall (->> dynamic-properties
+                  (map #(->> (.attr % "value")
+                             (re-seq #"jobParameters\['([\w\-]+)'\]")
+                             (map second)))
+                  flatten
+                  (apply hash-set))))))
 
 (defn find-undispatched [{:keys [datomic]}]
   (d/query
