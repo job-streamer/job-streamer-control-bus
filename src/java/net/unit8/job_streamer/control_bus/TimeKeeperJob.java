@@ -23,7 +23,8 @@ public class TimeKeeperJob implements Job {
         String command = data.getString("command");
 
         String host = data.getString("host");
-        int port = data.getInt("port");
+        long port = data.getLong("port");
+        String token = data.getString("token");
 
         URLConnection conn;
         try {
@@ -37,6 +38,7 @@ public class TimeKeeperJob implements Job {
             conn.setReadTimeout(5000);
             conn.setConnectTimeout(1000);
             ((HttpURLConnection) conn).setRequestMethod("PUT");
+            ((HttpURLConnection) conn).setRequestProperty("Authorization", "Token " + token);
             conn.connect();
             int statusCode = ((HttpURLConnection) conn).getResponseCode();
             if (statusCode != HttpURLConnection.HTTP_CREATED) {

@@ -110,7 +110,7 @@
           :agents    [:datomic]
           :apps      [:datomic :agents]
           :calendar  [:datomic :scheduler]
-          :scheduler [:datomic]
+          :scheduler [:datomic :token]
           :migration [:datomic]
           :recoverer [:datomic :jobs :agents]
           :dispatcher [:datomic :apps :jobs :agents]
