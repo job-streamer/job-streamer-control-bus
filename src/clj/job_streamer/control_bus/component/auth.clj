@@ -115,7 +115,7 @@
                             (ring-response {:session {:identity (select-keys user [:user/id :permissions])}
                                             :body (pr-str {:token (str access-token)})}))
                           (do (log/info "Login attempt failed because of authentification failure.")
-                            (ring-response {:body (pr-str {:messages ["Autification failure."]})})))))
+                            (ring-response {:status 401 :body (pr-str {:messages ["Autification failure."]})})))))
     :handle-no-content (fn [_] (ring-response {:session {}}))))
 
 (defn list-resource
