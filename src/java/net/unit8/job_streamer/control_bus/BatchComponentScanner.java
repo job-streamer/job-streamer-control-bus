@@ -1,28 +1,60 @@
 package net.unit8.job_streamer.control_bus;
 
-import com.google.common.base.Strings;
+import java.io.File;
+import java.io.IOException;
+import java.io.Serializable;
+import java.lang.annotation.Annotation;
+import java.net.MalformedURLException;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.URL;
+import java.net.URLClassLoader;
+import java.nio.file.FileSystems;
+import java.nio.file.FileVisitResult;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.PathMatcher;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Enumeration;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 
 import javax.batch.api.Batchlet;
 import javax.batch.api.chunk.ItemProcessor;
 import javax.batch.api.chunk.ItemReader;
 import javax.batch.api.chunk.ItemWriter;
+import javax.batch.api.chunk.listener.ChunkListener;
+import javax.batch.api.chunk.listener.ItemProcessListener;
+import javax.batch.api.chunk.listener.ItemReadListener;
+import javax.batch.api.chunk.listener.ItemWriteListener;
+import javax.batch.api.chunk.listener.RetryProcessListener;
+import javax.batch.api.chunk.listener.RetryReadListener;
+import javax.batch.api.chunk.listener.RetryWriteListener;
+import javax.batch.api.chunk.listener.SkipProcessListener;
+import javax.batch.api.chunk.listener.SkipReadListener;
+import javax.batch.api.chunk.listener.SkipWriteListener;
+import javax.batch.api.listener.JobListener;
+import javax.batch.api.listener.StepListener;
 import javax.inject.Named;
-import java.io.File;
-import java.io.IOException;
-import java.io.Serializable;
-import java.lang.annotation.Annotation;
-import java.net.*;
-import java.nio.file.*;
-import java.nio.file.attribute.BasicFileAttributes;
-import java.util.*;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
+
+import com.google.common.base.Strings;
 
 /**
  * @author kawasima
  */
 public class BatchComponentScanner {
     private BatchComponentContainer container = new BatchComponentContainer();
+    private final static Set<Class<?>> LISTENER_INTERFACES = 
+            new HashSet(Arrays.asList(JobListener.class,StepListener.class,ChunkListener.class,
+                    ItemProcessListener.class,ItemReadListener.class,ItemWriteListener.class,
+                    RetryProcessListener.class,RetryReadListener.class,RetryWriteListener.class,
+                    SkipProcessListener.class,SkipReadListener.class,SkipWriteListener.class));
 
     Set<String>  jarEntryNames(File zipFile) throws IOException {
         Set<String> entryNames = new HashSet<>();
@@ -68,6 +100,8 @@ public class BatchComponentScanner {
                     container.itemWriters.add(decideRefName(clazz));
                 } else if (ItemProcessor.class.isAssignableFrom(clazz)) {
                     container.itemProcessors.add(decideRefName(clazz));
+                } else if (isListener(clazz)) {
+                    container.listeners.add(decideRefName(clazz));
                 } else if (Throwable.class.isAssignableFrom(clazz)) {
                     container.throwables.add(decideRefName(clazz));
                 }
@@ -75,6 +109,15 @@ public class BatchComponentScanner {
                 // ignore
             }
         }
+    }
+    
+    private boolean isListener(Class<?> clazz){
+        for(Class<?> listenerInterface:LISTENER_INTERFACES){
+            if(listenerInterface.isAssignableFrom(clazz)){
+                return true;
+            }
+        }
+        return false;
     }
 
     void findClassInDir(final File dir, final ClassLoader loader) {
@@ -149,6 +192,9 @@ public class BatchComponentScanner {
         for (String itemProcessor : scanner.container.itemProcessors) {
             System.out.println("item-processor:"+ itemProcessor);
         }
+        for (String listener : scanner.container.listeners) {
+            System.out.println("listener:"+ listener);
+        }
         for (String throwable : scanner.container.throwables) {
             System.out.println("throwable:" + throwable);
         }
@@ -159,6 +205,7 @@ public class BatchComponentScanner {
         public Set<String> itemReaders = new HashSet<>();
         public Set<String> itemWriters = new HashSet<>();
         public Set<String> itemProcessors = new HashSet<>();
+        public Set<String> listeners = new HashSet<>();
         public Set<String> throwables = new HashSet<>();
 
         @Override
@@ -167,8 +214,8 @@ public class BatchComponentScanner {
                     "ItemReader:" + itemReaders + "\n" +
                     "ItemWriter:" + itemWriters + "\n" +
                     "ItemProcessor:" + itemProcessors + "\n" +
+                    "Listener:" + listeners + "\n" +
                     "Throwable:" + throwables + "\n";
-
         }
     }
 }

@@ -16,13 +16,11 @@
             [item-reader :string :many]
             [item-writer :string :many]
             [item-processor :string :many]
+            [listener :string :many]
             [throwable :string :many]))
    (schema job
            (fields
             [name :string  :indexed :fulltext]
-            [restartable? :boolean]
-            [steps :ref :many]
-            [edn-notation :string]
             [bpmn-xml-notation :string]
             [svg-notation :string]
             [schedule :ref]
@@ -40,23 +38,6 @@
             [batch-status :ref]
             [exit-status  :string]
             [type :string]))
-   (schema step
-           (fields
-            [name :string :indexed]
-            [start-limit :long]
-            [allow-start-if-complete? :boolean]
-            [chunk :ref]
-            [batchlet :ref]))
-   (schema chunk
-           (fields
-            [checkpoint-policy :enum [:item :custom]]
-            [item-count  :long]
-            [time-limit  :long]
-            [skip-limit  :long]
-            [retry-limit :long]))
-   (schema batchlet
-           (fields
-            [ref :string]))
    (schema agent
            (fields
             [instance-id :uuid :unique-value :indexed]
@@ -74,7 +55,7 @@
             [step-executions :ref :many]))
    (schema step-execution
            (fields
-            [step :ref]
+            [step-name :string]
             [step-execution-id :long]
             [start-time :instant]
             [end-time   :instant]

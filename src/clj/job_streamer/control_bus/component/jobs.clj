@@ -18,7 +18,10 @@
             (job-streamer.control-bus.component [datomic :as d]
                                                 [agents  :as ag]
                                                 [scheduler :as scheduler]))
-  (:import [java.util Date]))
+  (:import [java.util Date])
+  (:import  [org.jsoup Jsoup]
+           [org.jsoup.nodes Element Node]
+           [org.jsoup.parser Tag Parser]))
 
 (defn find-latest-execution
   "Find latest from given executions."
@@ -38,21 +41,15 @@
       {:job-execution/start-time next-start})))
 
 (defn extract-job-parameters [job]
-  (->> (edn/read-string (:job/edn-notation job))
-       (tree-seq coll? seq)
-       (filter #(and (vector? %)
-                     (keyword? (first %))
-                     (= (name (first %)) "properties")
-                     (map? (second %))))
-       (map #(->> (second %)
-                  (vals)
-                  (map (fn [v] (->> (re-seq #"#\{([^\}]+)\}" v)
-                                    (map second))))))
-       (flatten)
-       (map #(->> (re-seq #"jobParameters\['(\w+)'\]" %)
-                  (map second)))
-       (flatten)
-       (apply hash-set)))
+  (when-let [bpmn (:bpmn-xml-notation job)]
+    (let [jobxml (Jsoup/parse bpmn "" (Parser/xmlParser))
+          dynamic-properties (.select jobxml "jsr352|job > bpmn|extensionElements > camunda|properties > camunda|property[value~=#\\{jobParameters\\['[\\w\\-]+'\\]\\}]")]
+      (doall (->> dynamic-properties
+                  (map #(->> (.attr % "value")
+                             (re-seq #"jobParameters\['([\w\-]+)'\]")
+                             (map second)))
+                  flatten
+                  (apply hash-set))))))
 
 (defn find-undispatched [{:keys [datomic]}]
   (d/query
@@ -60,10 +57,9 @@
    '{:find [?job-execution ?job-obj ?param-map]
      :where [[?job :job/executions ?job-execution]
              [?job-execution :job-execution/job-parameters ?parameter]
-             [?job :job/edn-notation ?edn-notation]
+             [?job :job/bpmn-xml-notation ?job-obj]
              (or [?job-execution :job-execution/batch-status :batch-status/undispatched]
                  [?job-execution :job-execution/batch-status :batch-status/unrestarted])
-             [(clojure.edn/read-string ?edn-notation) ?job-obj]
              [(clojure.edn/read-string ?parameter) ?param-map]]}))
 
 (defn find-by-name [{:keys [datomic]} app-name job-name]
@@ -308,7 +304,7 @@
                      {:job-execution/step-executions
                       [:*
                        {:step-execution/batch-status [:db/ident]}
-                       {:step-execution/step [:step/name]}]}] job-execution)]
+                       :step-execution/step-name]}] job-execution)]
     (update-in je [:job-execution/step-executions]
                #(map (fn [step-execution]
                        (assoc step-execution
@@ -338,7 +334,6 @@
   (log/debug "progress update: " id execution)
   (let [job (d/query datomic
                      '{:find [(pull ?job [:job/name
-                                          {:job/steps [:step/name]}
                                           {:job/status-notifications
                                            [{:status-notification/batch-status [:db/ident]}
                                             :status-notification/exit-status
@@ -361,7 +356,7 @@
                         {:job-execution/start-time start-time})
                       (when-let [end-time (:end-time execution)]
                         {:job-execution/end-time end-time})
-                      (when-let [step-executions (and (empty?  (d/query datomic
+                      (when-let [step-executions (and (empty? (d/query datomic
                                                                         '{:find [?step-executions]
                                                                           :in [$]
                                                                           :where [[?step-executions :job-execution/step-executions ?job-execution-id]]} id))
@@ -369,7 +364,7 @@
                         {:job-execution/step-executions (map (fn [m]
                                                                (->> m
                                                                     (map #(vector (keyword "step-execution" (name (key %))) (val %)))
-                                                                    (into {:db/id #db/id[:db.part/user -1]})))
+                                                                    (into {:db/id (d/tempid :db.part/user)})))
                                                              step-executions)}))]))
 
 (defn save-status-notification
@@ -412,7 +407,8 @@
                      (when (with-params :schedule)
                        {:job/schedule schedule})
                      (when (with-params :notation)
-                       {:job/edn-notation (:job/edn-notation job)})
+                       {:job/bpmn-xml-notation (:job/bpmn-xml-notation job)
+                        :job/svg-notation (:job/svg-notation job)})
                      (when (with-params :settings)
                        (merge {:job/exclusive? (get job :job/exclusive? false)}
                               (when-let [time-monitor (get-in job [:job/time-monitor :db/id])]

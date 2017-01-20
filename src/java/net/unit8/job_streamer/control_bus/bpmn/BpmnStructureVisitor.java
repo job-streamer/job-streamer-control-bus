@@ -90,7 +90,7 @@ public class BpmnStructureVisitor implements NodeVisitor {
             } else if (batchComponents.containsKey(targetRef)) {
                 Element nextEl = jobEl.appendElement("next");
                 nextEl.attr("on", on);
-                nextEl.attr("to", batchComponents.get(targetRef).attr("name"));
+                nextEl.attr("to", or(batchComponents.get(targetRef).attr("name"),batchComponents.get(targetRef).attr("id")));
             }
         }
     }
@@ -113,7 +113,8 @@ public class BpmnStructureVisitor implements NodeVisitor {
         switch(node.nodeName()) {
             case "jsr352:job":
                 el = new Element(Tag.valueOf("job"), "");
-                el.attr("name", node.attr("name"));
+                el.attr("id", or(
+                        node.attr("name"),node.attr("bpmn:name")));
                 parseProperties((Element) node, el);
                 current.appendChild(el);
                 current = el;

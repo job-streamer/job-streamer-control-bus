@@ -5,7 +5,8 @@
             (job-streamer.control-bus.component [agents :as ag]
                                                 [apps :as apps]
                                                 [datomic :as d]
-                                                [jobs :as jobs])))
+                                                [jobs :as jobs]))
+  (:import [net.unit8.job_streamer.control_bus.bpmn BpmnParser]))
 
 (defn- restart [{:keys [agents datomic jobs]} execution class-loader-id]
   (log/info "restart:" execution)
@@ -66,12 +67,12 @@
   (go-loop []
     (when-let [_ (<! submitter-ch)]
       (let [undispatched (jobs/find-undispatched jobs)]
-        (doseq [[execution-request job parameter] undispatched]
+        (doseq [[execution-request job-bpmn-xml parameter] undispatched]
           (submit dispatcher
                   {:request-id execution-request
                    :class-loader-id (:application/class-loader-id
                                      (apps/find-by-name apps "default"))
-                   :job job
+                   :job (str "<?xml version=\"1.0\" encoding=\"UTF-8\"?> " \newline (some-> (new BpmnParser) (.parse job-bpmn-xml) .toString))
                    :restart? (= (some-> (d/pull datomic
                                                 '[:job-execution/batch-status]
                                                 execution-request)
