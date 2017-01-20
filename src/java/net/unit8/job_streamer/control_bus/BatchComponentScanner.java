@@ -17,6 +17,7 @@ import java.nio.file.PathMatcher;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.HashSet;
 import java.util.List;
@@ -49,6 +50,11 @@ import com.google.common.base.Strings;
  */
 public class BatchComponentScanner {
     private BatchComponentContainer container = new BatchComponentContainer();
+    private final static Set<Class<?>> LISTENER_INTERFACES = 
+            new HashSet(Arrays.asList(JobListener.class,StepListener.class,ChunkListener.class,
+                    ItemProcessListener.class,ItemReadListener.class,ItemWriteListener.class,
+                    RetryProcessListener.class,RetryReadListener.class,RetryWriteListener.class,
+                    SkipProcessListener.class,SkipReadListener.class,SkipWriteListener.class));
 
     Set<String>  jarEntryNames(File zipFile) throws IOException {
         Set<String> entryNames = new HashSet<>();
@@ -106,20 +112,7 @@ public class BatchComponentScanner {
     }
     
     private boolean isListener(Class<?> clazz){
-        Set<Class<?>> listenerInterfaces = new HashSet();
-        listenerInterfaces.add(JobListener.class);
-        listenerInterfaces.add(StepListener.class);
-        listenerInterfaces.add(ChunkListener.class);
-        listenerInterfaces.add(ItemProcessListener.class);
-        listenerInterfaces.add(ItemReadListener.class);
-        listenerInterfaces.add(ItemWriteListener.class);
-        listenerInterfaces.add(RetryProcessListener.class);
-        listenerInterfaces.add(RetryReadListener.class);
-        listenerInterfaces.add(RetryWriteListener.class);
-        listenerInterfaces.add(SkipProcessListener.class);
-        listenerInterfaces.add(SkipReadListener.class);
-        listenerInterfaces.add(SkipWriteListener.class);
-        for(Class<?> listenerInterface:listenerInterfaces){
+        for(Class<?> listenerInterface:LISTENER_INTERFACES){
             if(listenerInterface.isAssignableFrom(clazz)){
                 return true;
             }
