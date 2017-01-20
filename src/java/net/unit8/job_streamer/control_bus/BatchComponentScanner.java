@@ -189,7 +189,7 @@ public class BatchComponentScanner {
             System.out.println("item-processor:"+ itemProcessor);
         }
         for (String listener : scanner.container.listeners) {
-            System.out.println("listeners:"+ listener);
+            System.out.println("listener:"+ listener);
         }
         for (String throwable : scanner.container.throwables) {
             System.out.println("throwable:" + throwable);
@@ -210,7 +210,7 @@ public class BatchComponentScanner {
                     "ItemReader:" + itemReaders + "\n" +
                     "ItemWriter:" + itemWriters + "\n" +
                     "ItemProcessor:" + itemProcessors + "\n" +
-                    "Listeners:" + listeners + "\n" +
+                    "Listener:" + listeners + "\n" +
                     "Throwable:" + throwables + "\n";
         }
     }
