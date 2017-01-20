@@ -61,7 +61,7 @@
                         :batch-component/item-reader []
                         :batch-component/item-writer []
                         :batch-component/item-processor []
-                        :batch-component/listeners []
+                        :batch-component/listener []
                         :batch-component/throwable []})))))))
 
 (defn- find-batch-component [datomic app-name]
@@ -169,7 +169,7 @@
                                 :batch-component/item-writer []
                                 :batch-component/item-processor []
                                 :batch-component/item-reader []
-                                :batch-component/listeners []}]
+                                :batch-component/listener []}]
                   (merge-with #(vec (concat %1 %2))  builtins in-app)))))
 
 (defn stats-resource [{:keys [datomic agents]} app-name]

@@ -16,7 +16,7 @@
             [item-reader :string :many]
             [item-writer :string :many]
             [item-processor :string :many]
-            [listeners :string :many]
+            [listener :string :many]
             [throwable :string :many]))
    (schema job
            (fields
