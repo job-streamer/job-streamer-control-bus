@@ -94,18 +94,7 @@ public class BatchComponentScanner {
                     container.itemWriters.add(decideRefName(clazz));
                 } else if (ItemProcessor.class.isAssignableFrom(clazz)) {
                     container.itemProcessors.add(decideRefName(clazz));
-                } else if (JobListener.class.isAssignableFrom(clazz) 
-                        || StepListener.class.isAssignableFrom(clazz)
-                        || ChunkListener.class.isAssignableFrom(clazz)
-                        || ItemProcessListener.class.isAssignableFrom(clazz)
-                        || ItemReadListener.class.isAssignableFrom(clazz)
-                        || ItemWriteListener.class.isAssignableFrom(clazz)
-                        || RetryProcessListener.class.isAssignableFrom(clazz)
-                        || RetryReadListener.class.isAssignableFrom(clazz)
-                        || RetryWriteListener.class.isAssignableFrom(clazz)
-                        || SkipProcessListener.class.isAssignableFrom(clazz)
-                        || SkipReadListener.class.isAssignableFrom(clazz)
-                        || SkipWriteListener.class.isAssignableFrom(clazz)) {
+                } else if (isListener(clazz)) {
                     container.listeners.add(decideRefName(clazz));
                 } else if (Throwable.class.isAssignableFrom(clazz)) {
                     container.throwables.add(decideRefName(clazz));
@@ -114,6 +103,28 @@ public class BatchComponentScanner {
                 // ignore
             }
         }
+    }
+    
+    private boolean isListener(Class<?> clazz){
+        Set<Class<?>> listenerInterfaces = new HashSet();
+        listenerInterfaces.add(JobListener.class);
+        listenerInterfaces.add(StepListener.class);
+        listenerInterfaces.add(ChunkListener.class);
+        listenerInterfaces.add(ItemProcessListener.class);
+        listenerInterfaces.add(ItemReadListener.class);
+        listenerInterfaces.add(ItemWriteListener.class);
+        listenerInterfaces.add(RetryProcessListener.class);
+        listenerInterfaces.add(RetryReadListener.class);
+        listenerInterfaces.add(RetryWriteListener.class);
+        listenerInterfaces.add(SkipProcessListener.class);
+        listenerInterfaces.add(SkipReadListener.class);
+        listenerInterfaces.add(SkipWriteListener.class);
+        for(Class<?> listenerInterface:listenerInterfaces){
+            if(listenerInterface.isAssignableFrom(clazz)){
+                return true;
+            }
+        }
+        return false;
     }
 
     void findClassInDir(final File dir, final ClassLoader loader) {
