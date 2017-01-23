@@ -665,7 +665,17 @@
                                 {:job-execution/batch-status [:db/ident]}]}] job-id)})
    :post-to-existing? (fn [ctx]
                         (when (#{:put :post} (get-in ctx [:request :request-method]))
-                          (not (:job/exclusive? (:job ctx)))))
+                           (let [job (d/pull datomic
+                                             '[:*
+                                               {:job/executions
+                                                [:db/id
+                                                 :job-execution/create-time
+                                                 :job-execution/end-time]}
+                                               {:job/schedule [:schedule/cron-notation :schedule/active?]}]
+                                             (second (find-by-name jobs app-name job-name)))
+                                 last-execution (-> job :job/executions find-latest-execution)]
+                             (not (and (:job/exclusive? (:job ctx))
+                                            (not (:job-execution/end-time last-execution))))))))
    :put-to-existing? (fn [ctx]
                        (#{:put :post} (get-in ctx [:request :request-method])))
    :post-to-missing? (fn [ctx] (find-by-name jobs app-name job-name))
