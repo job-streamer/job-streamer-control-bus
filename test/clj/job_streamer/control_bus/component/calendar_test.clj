@@ -82,7 +82,7 @@
         (is (= 201 (-> (handler request) :status)))))
     (testing "get two calendar"
       (let [request {:request-method :get}
-            res (-> (handler request) :body edn/read-string)]
+            res (->> (handler request) :body edn/read-string (sort-by :calendar/name))]
         (is (= 2 (count res)))
         (is (= "cal" (-> res first :calendar/name)))
         (is (= "02:00" (-> res first :calendar/day-start)))))))
