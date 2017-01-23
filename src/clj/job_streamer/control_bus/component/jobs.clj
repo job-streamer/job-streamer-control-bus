@@ -675,8 +675,8 @@
                                              (second (find-by-name jobs app-name job-name)))
                                  last-execution (-> job :job/executions find-latest-execution)]
                              (not (and (:job/exclusive? (:job ctx))
-                                       (and last-execution
-                                            (not (:job-execution/end-time last-execution))))))))
+                                       last-execution
+                                       (not (:job-execution/end-time last-execution)))))))
    :put-to-existing? (fn [ctx]
                        (#{:put :post} (get-in ctx [:request :request-method])))
    :post-to-missing? (fn [ctx] (find-by-name jobs app-name job-name))
