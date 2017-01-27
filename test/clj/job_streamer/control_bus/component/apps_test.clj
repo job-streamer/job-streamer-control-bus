@@ -72,7 +72,7 @@
                                      :batch-component/throwable []})}
           #(list-handler post-request))
         (is (= (-> get-request entry-handler :body read-string :batch-component/batchlet)
-            ["org.jobstreamer.batch.ShellBatchlet" "batchlet1"]))))))
+            ["org.jobstreamer.batch.ShellBatchlet" "org.jobstreamer.batch.JavaMainBatchlet" "batchlet1"]))))))
 
 (deftest batch-components-resource
   (let [system (new-system config)
