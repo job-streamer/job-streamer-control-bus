@@ -269,8 +269,8 @@
 
 (defn filter-execution [filter-mode]
   (case filter-mode
-    :all true
-    :test :job-execution/test?
+    "all" (fn [_] true)
+    "test" :job-execution/test?
     #(not (:job-execution/test? %))))
 
 (defn find-executions [{:keys [datomic]} app-name job-name & [offset limit filter-mode]]
@@ -300,7 +300,7 @@
                                     :job-execution/agent
                                     [:agent/instance-id :agent/name]}]
                                  (first %)))
-                   (filter (filter-execution (or filter-mode :not-test)))
+                   (filter (filter-execution filter-mode))
                    vec)
      :hits    (count executions)
      :offset  offset
@@ -717,9 +717,11 @@
                        [[:db.fn/retractEntity (:db/id %)]])
                      (:results (find-executions jobs app-name job-name 0 Integer/MAX_VALUE)))))
    :handle-ok (fn [{{{:keys [offset limit filter-mode]} :params} :request}]
+                (println filter-mode)
                (find-executions jobs app-name job-name
                                  (to-int offset 0)
-                                 (to-int limit 20)))))
+                                 (to-int limit 20)
+                                 filter-mode))))
 
 (defn execution-resource [{:keys [agents scheduler datomic] :as jobs} id & [cmd]]
   (liberator/resource
