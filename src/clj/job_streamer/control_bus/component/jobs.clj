@@ -18,8 +18,8 @@
             (job-streamer.control-bus.component [datomic :as d]
                                                 [agents  :as ag]
                                                 [scheduler :as scheduler]))
-  (:import [java.util Date])
-  (:import  [org.jsoup Jsoup]
+  (:import [java.util Date]
+           [org.jsoup Jsoup]
            [org.jsoup.nodes Element Node]
            [org.jsoup.parser Tag Parser]))
 
@@ -54,9 +54,10 @@
 (defn find-undispatched [{:keys [datomic]}]
   (d/query
    datomic
-   '{:find [?job-execution ?job-obj ?param-map]
+   '{:find [?job-execution ?job-obj ?param-map ?test?]
      :where [[?job :job/executions ?job-execution]
              [?job-execution :job-execution/job-parameters ?parameter]
+             [?job-execution :job-execution/test? ?test?]
              [?job :job/bpmn-xml-notation ?job-obj]
              (or [?job-execution :job-execution/batch-status :batch-status/undispatched]
                  [?job-execution :job-execution/batch-status :batch-status/unrestarted])
@@ -254,6 +255,7 @@
                                 :job-execution/start-time
                                 :job-execution/end-time
                                 :job-execution/exit-status
+                                :job-execution/test?
                                 {:job-execution/batch-status [:db/ident]}]}
                               {:job/schedule
                                [:db/id :schedule/cron-notation :schedule/active?]}])))
@@ -265,7 +267,13 @@
                                   (take 100))))))
          vec)))
 
-(defn find-executions [{:keys [datomic]} app-name job-name & [offset limit]]
+(defn filter-execution [filter-mode]
+  (case filter-mode
+    :all true
+    :test :job-execution/test?
+    #(not (:job-execution/test? %))))
+
+(defn find-executions [{:keys [datomic]} app-name job-name & [offset limit filter-mode]]
   (let [executions (d/query datomic
                             '{:find [?job-execution ?create-time]
                               :in [$ ?app-name ?job-name]
@@ -287,11 +295,12 @@
                                    :job-execution/end-time
                                    :job-execution/job-parameters
                                    :job-execution/exit-status
+                                   :job-execution/test?
                                    {:job-execution/batch-status [:db/ident]
                                     :job-execution/agent
                                     [:agent/instance-id :agent/name]}]
                                  (first %)))
-
+                   (filter (filter-execution (or filter-mode :not-test)))
                    vec)
      :hits    (count executions)
      :offset  offset
@@ -402,7 +411,7 @@
               (merge {:job/name job-name}
                      (when (with-params :execution)
                        {:job/executions (append-schedule scheduler (:db/id job) executions schedule)
-                        :job/latest-execution (find-latest-execution executions)
+                        :job/latest-execution (find-latest-execution (filter #(not (:job-execution/test? %)) executions))
                         :job/next-execution   (find-next-execution jobs job)})
                      (when (with-params :schedule)
                        {:job/schedule schedule})
@@ -527,6 +536,7 @@
                                      :job-execution/end-time
                                      :job-execution/create-time
                                      :job-execution/exit-status
+                                     :job-execution/test?
                                      {:job-execution/batch-status [:db/ident]}
                                      {:job-execution/agent [:agent/name :agent/instance-id]}]}
                                    {:job/schedule [:schedule/cron-notation :schedule/active?]}]
@@ -550,7 +560,8 @@
                                   success))]
                  (-> job
                      (assoc :job/stats {:total total :success success :failure failure :average average}
-                       :job/latest-execution (find-latest-execution (:job/executions job))
+                       :job/latest-execution (find-latest-execution
+                                               (filter #(not (:job-execution/test? %)) (:job/executions job)))
                        :job/next-execution   (find-next-execution jobs job)
                        :job/dynamic-parameters (extract-job-parameters job))
                      (dissoc :job/executions))))))
@@ -638,7 +649,8 @@
                        [{:db/id execution-id
                          :job-execution/batch-status :batch-status/undispatched
                          :job-execution/create-time (java.util.Date.)
-                         :job-execution/job-parameters (pr-str (or (:edn ctx) {}))}
+                         :job-execution/job-parameters (pr-str (or (-> ctx :edn (dissoc :test?)) {}))
+                         :job-execution/test? (true? (get-in ctx [:edn :test?]))}
                         [:db/add job-id :job/executions execution-id]])
                       :tempids)]
       (when-let [time-monitor (d/pull datomic
@@ -704,8 +716,8 @@
                 (map #(d/transact datomic
                        [[:db.fn/retractEntity (:db/id %)]])
                      (:results (find-executions jobs app-name job-name 0 Integer/MAX_VALUE)))))
-   :handle-ok (fn [{{{:keys [offset limit]} :params} :request}]
-                (find-executions jobs app-name job-name
+   :handle-ok (fn [{{{:keys [offset limit filter-mode]} :params} :request}]
+               (find-executions jobs app-name job-name
                                  (to-int offset 0)
                                  (to-int limit 20)))))
 
