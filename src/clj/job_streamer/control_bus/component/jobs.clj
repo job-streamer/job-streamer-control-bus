@@ -282,11 +282,8 @@
                                       [?app :application/jobs ?job]
                                       [?job :job/name ?job-name]
                                       [?job :job/executions ?job-execution]]}
-                            app-name job-name)]
-    {:results (->> executions
-                   (sort-by second #(compare %2 %1))
-                   (drop (dec offset))
-                   (take limit)
+                            app-name job-name)
+        results (->> executions
                    (map #(d/pull datomic
                                  '[:db/id
                                    :job-execution/execution-id
@@ -301,8 +298,12 @@
                                     [:agent/instance-id :agent/name]}]
                                  (first %)))
                    (filter (filter-execution filter-mode))
-                   vec)
-     :hits    (count executions)
+                   (sort-by second #(compare %2 %1))
+                   (drop (dec offset))
+                   (take limit)
+                   vec)]
+    {:results results
+     :hits    (count results)
      :offset  offset
      :limit   limit}))
 
@@ -717,7 +718,6 @@
                        [[:db.fn/retractEntity (:db/id %)]])
                      (:results (find-executions jobs app-name job-name 0 Integer/MAX_VALUE)))))
    :handle-ok (fn [{{{:keys [offset limit filter-mode]} :params} :request}]
-                (println filter-mode)
                (find-executions jobs app-name job-name
                                  (to-int offset 0)
                                  (to-int limit 20)
