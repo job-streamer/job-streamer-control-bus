@@ -542,17 +542,18 @@
                                      {:job-execution/agent [:agent/name :agent/instance-id]}]}
                                    {:job/schedule [:schedule/cron-notation :schedule/active?]}]
                                  (:job-id ctx))
-                     total (count (:job/executions job))
-                     success (->> (:job/executions job)
+                     executions (filter #(not (:job-execution/test? %)) (:job/executions job))
+                     total (count executions)
+                     success (->> executions
                                   (filter #(= (get-in % [:job-execution/batch-status :db/ident])
                                               :batch-status/completed))
                                   count)
-                     failure (->> (:job/executions job)
+                     failure (->> executions
                                   (filter #(= (get-in % [:job-execution/batch-status :db/ident])
                                               :batch-status/failed))
                                   count)
                      average (if (= success 0) 0
-                               (/ (->> (:job/executions job)
+                               (/ (->> executions
                                        (filter #(= (get-in % [:job-execution/batch-status :db/ident])
                                                    :batch-status/completed))
                                        (map #(- (.getTime (:job-execution/end-time %))
