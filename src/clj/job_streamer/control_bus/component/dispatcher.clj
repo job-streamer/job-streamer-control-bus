@@ -78,6 +78,7 @@
    (.toString jobxml)))
 
 (defn make-job [job-bpmn-xml test?]
+  (log/info "make job-xml form bpmn" \newline job-bpmn-xml)
   (let [job (str "<?xml version=\"1.0\" encoding=\"UTF-8\"?> " \newline (some-> (new BpmnParser) (.parse job-bpmn-xml) .toString))]
     (if test?
       (convert-to-test-job job)
