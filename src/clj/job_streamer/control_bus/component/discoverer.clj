@@ -66,22 +66,26 @@
         buf (ByteBuffer/allocate 256)]
     (.receive channel buf)
     (.flip buf)
-    
-    (let [agent-address (first (read-agent-addresses buf))]
-      (log/debug "Find agent: " agent-address)
-      (log/debug "Send join request" (str "http://" (.getHostAddress (:host agent-address))
-                       ":" (:port agent-address) "/join-bus"))
-      (log/debug "  :control-bus-url " (str "ws://" (.getHostAddress (select-control-bus-url agent-address))
-                        ":" ws-port "/join"))
-      (log/debug "  :agent-host " (.getHostAddress (:host agent-address)))
-      @(http/post (str "http://" (.getHostAddress (:host agent-address))
-                       ":" (:port agent-address) "/join-bus")
-                  {:form-params
-                   {:control-bus-url (str "ws://" (.getHostAddress (select-control-bus-url agent-address))
-                                          ":" ws-port "/join")
-                    :agent-host (.getHostAddress (:host agent-address))}}
-                  (fn [{:keys [status headers error]}]
-                    (log/debug "join-request" status))))))
+
+    (letfn [(try-post [agent-addresses]
+      (when-let [agent-address (first agent-addresses)]
+        (log/debug "Find agent: " agent-address)
+        (log/debug "Send join request" (str "http://" (.getHostAddress (:host agent-address))
+                         ":" (:port agent-address) "/join-bus"))
+        (log/debug "  :control-bus-url " (str "ws://" (.getHostAddress (select-control-bus-url agent-address))
+                          ":" ws-port "/join"))
+        (log/debug "  :agent-host " (.getHostAddress (:host agent-address)))
+        @(http/post (str "http://" (.getHostAddress (:host agent-address))
+                         ":" (:port agent-address) "/join-bus")
+                    {:form-params
+                     {:control-bus-url (str "ws://" (.getHostAddress (select-control-bus-url agent-address))
+                                            ":" ws-port "/join")
+                      :agent-host (.getHostAddress (:host agent-address))}}
+                    (fn [{:keys [status headers error] :as res}]
+                      (if error
+                        (try-post (rest agent-addresses))
+                        (log/debug "join-request" status))))))]
+      (try-post (read-agent-addresses buf)))))
 
 (defrecord Discoverer [ws-port]
   component/Lifecycle
