@@ -9,8 +9,12 @@
   <appender name="datomic" class="net.unit8.job_streamer.control_bus.DatomicAppender">
     <uri>datomic:free://localhost:4334/job-streamer</uri>
   </appender>
+  <appender name="job-appender" class="net.unit8.job_streamer.control_bus.JobExecutionAppender">
+    <uri>datomic:free://localhost:4334/job-streamer</uri>
+  </appender>
 
-  <logger name="datomic" level="WARN"/>
+  <logger name="step-datomic" level="WARN"/>
+  <logger name="job-datomic" level="WARN"/>
   <logger name="job-streamer.control-bus" level="DEBUG"/>
   <logger name="net.unit8" level="INFO"/>
 
@@ -20,8 +24,9 @@
   <logger name="example" level="INFO">
     <appender-ref ref="datomic"/>
   </logger>
-
-
+  <logger name="org.jberet" level="ERROR">
+    <appender-ref ref="job-appender"/>
+  </logger>
   <root level="info">
     <appender-ref ref="STDOUT"/>
   </root>

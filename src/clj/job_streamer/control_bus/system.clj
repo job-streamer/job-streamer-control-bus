@@ -106,7 +106,7 @@
           :app       [:api :token]
           :api       [:apps :calendar :agents :jobs :scheduler :auth]
           :socketapp [:datomic :jobs :agents]
-          :jobs      [:datomic :scheduler :agents]
+          :jobs      [:datomic :scheduler :agents :apps]
           :agents    [:datomic]
           :apps      [:datomic :agents]
           :calendar  [:datomic :scheduler]

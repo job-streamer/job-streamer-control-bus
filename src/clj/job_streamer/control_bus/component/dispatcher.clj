@@ -5,11 +5,7 @@
             (job-streamer.control-bus.component [agents :as ag]
                                                 [apps :as apps]
                                                 [datomic :as d]
-                                                [jobs :as jobs]))
-  (:import [net.unit8.job_streamer.control_bus.bpmn BpmnParser]
-           [org.jsoup Jsoup]
-           [org.jsoup.nodes Element Node]
-           [org.jsoup.parser Tag Parser]))
+                                                [jobs :as jobs])))
 
 (defn- restart [{:keys [agents datomic jobs]} execution class-loader-id]
   (log/info "restart:" execution)
@@ -66,41 +62,22 @@
     (catch Exception ex
       (log/error "dispatch failure" ex))))
 
-(defn convert-to-test-job [jobxml-str]
- (let [jobxml (Jsoup/parse  jobxml-str "" (Parser/xmlParser))
-       steps (.select jobxml "step")
-       batchlets (.select jobxml "step > batchlet")
-       chunks (.select jobxml "step > chunk")]
-     (.remove batchlets)
-     (.remove chunks)
-   (doall
-     (map #(.appendChild % (some-> (Tag/valueOf "batchlet") (Element. "") (.attr "ref" "org.jobstreamer.batch.TestBatchlet"))) steps))
-   (.toString jobxml)))
-
-(defn make-job [job-bpmn-xml test?]
-  (log/info "make job-xml form bpmn" \newline job-bpmn-xml)
-  (let [job (str "<?xml version=\"1.0\" encoding=\"UTF-8\"?> " \newline (some-> (new BpmnParser) (.parse job-bpmn-xml) .toString))]
-    (if test?
-      (convert-to-test-job job)
-      job)))
-
 (defn submitter [{:keys [jobs apps datomic submitter-ch] :as dispatcher}]
   (go-loop []
     (when-let [_ (<! submitter-ch)]
       (let [undispatched (jobs/find-undispatched jobs)]
-        (doseq [[execution-request job-bpmn-xml parameter test?] undispatched]
+        (doseq [[execution-request job-bpmn-xml parameter] undispatched]
           (submit dispatcher
                   {:request-id execution-request
                    :class-loader-id (:application/class-loader-id
                                      (apps/find-by-name apps "default"))
-                   :job (make-job job-bpmn-xml test?)
+                   :job (jobs/make-job job-bpmn-xml)
                    :restart? (= (some-> (d/pull datomic
                                                 '[:job-execution/batch-status]
                                                 execution-request)
                                         :job-execution/batch-status
                                         :db/ident)
                                 :batch-status/undispatched)
-                   :test? test?
                    :parameters parameter}))
         (<! (timeout 2000))
         (put! submitter-ch :continue)
