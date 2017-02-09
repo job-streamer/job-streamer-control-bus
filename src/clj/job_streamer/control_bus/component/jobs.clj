@@ -43,7 +43,7 @@
 (defn extract-job-parameters [job]
   (when-let [bpmn (:job/bpmn-xml-notation job)]
     (let [jobxml (Jsoup/parse bpmn "" (Parser/xmlParser))
-          dynamic-properties (.select jobxml "jsr352|job > bpmn|extensionElements > camunda|properties > camunda|property[value~=#\\{jobParameters\\['[\\w\\-]+'\\]\\}]")]
+          dynamic-properties (.select jobxml "bpmn|extensionElements > camunda|properties > camunda|property[value~=#\\{jobParameters\\['[\\w\\-]+'\\]\\}]")]
       (doall (->> dynamic-properties
                   (map #(->> (.attr % "value")
                              (re-seq #"jobParameters\['([\w\-]+)'\]")
