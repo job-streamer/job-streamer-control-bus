@@ -3,8 +3,7 @@
                                                 [apps :as apps]
                                                 [scheduler :as scheduler]
                                                 [datomic :refer [datomic-component] :as d]
-                                                [migration :refer [migration-component]]
-                                                [token :refer [token-provider-component]])
+                                                [migration :refer [migration-component]])
             (job-streamer.control-bus [system :as system]
                                       [model :as model]
                                       [config :as config])
@@ -33,12 +32,11 @@
        :jobs    (jobs/jobs-component (:jobs config))
        :scheduler (scheduler/scheduler-component (:scheduler config))
        :datomic (datomic-component   (:datomic config))
-       :migration (migration-component {:dbschema model/dbschema})
-       :token (token-provider-component {:token config}))
+       :migration (migration-component {:dbschema model/dbschema}))
       (component/system-using
        {:jobs [:datomic :migration :scheduler]
         :apps [:datomic]
-        :scheduler [:datomic :token]
+        :scheduler [:datomic]
         :migration [:datomic]})
       (component/start-system)))
 
