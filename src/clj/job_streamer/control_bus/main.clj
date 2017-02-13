@@ -23,8 +23,12 @@
 |_____|___|___|_____|_| |_| |___|__,|_|_|_|___|_|
 ")
 
+(def system
+  (atom nil))
+
 (defn -main [& args]
-  (let [system (new-system config)]
-    (println banner "Starting HTTP server on port" (-> system :http :port))
-    (add-shutdown-hook ::stop-system #(component/stop system))
-    (component/start system)))
+    (reset! system (new-system config))
+    (println banner "Starting HTTP server on port" (-> @system :http :port))
+    (add-shutdown-hook ::stop-system #(component/stop @system))
+    (swap! system component/start))
+
