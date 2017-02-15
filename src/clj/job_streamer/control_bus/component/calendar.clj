@@ -138,7 +138,8 @@
                          :calendar/name (:calendar/name cal)
                          :calendar/holidays (:calendar/holidays cal)
                          :calendar/weekly-holiday (pr-str (:calendar/weekly-holiday cal))
-                         :calendar/day-start (:calendar/day-start cal "00:00")}]))
+                         :calendar/day-start (:calendar/day-start cal "00:00")}])
+           (scheduler/modify-calendar scheduler cal))
    :delete! (fn [ctx]
               (scheduler/delete-calendar scheduler name)
               (d/transact datomic
