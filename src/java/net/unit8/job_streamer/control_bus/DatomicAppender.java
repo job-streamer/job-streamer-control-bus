@@ -34,7 +34,6 @@ public class DatomicAppender extends UnsynchronizedAppenderBase<ILoggingEvent> {
                 , conn.db(), instanceId);
 
         if (agentId == null) return;
-
         Object tempId = Peer.tempid(":db.part/user");
         Map executionLog = new HashMap(Util.map(
                 ":db/id", tempId,
@@ -43,7 +42,7 @@ public class DatomicAppender extends UnsynchronizedAppenderBase<ILoggingEvent> {
                 ":execution-log/date", new Date(event.getTimeStamp()),
                 ":execution-log/logger", event.getLoggerName(),
                 ":execution-log/level", ":log-level/" + event.getLevel().toString().toLowerCase(),
-                ":execution-log/message", event.getMessage()));
+                ":execution-log/message", event.getFormattedMessage()));
         if (event.getThrowableProxy() != null) {
             executionLog.put(
                     ":execution-log/exception",

@@ -7,7 +7,7 @@ import clojure.lang.*;
  */
 public class SystemUtil {
     public static Object getSystem() {
-        Var varSystem = RT.var("job-streamer.agent.main", "system");
+        Var varSystem = RT.var("job-streamer.control-bus.main", "system");
         if (varSystem.isBound()) {
             Atom mainSystemAtom = (Atom) varSystem.get();
             Object system = mainSystemAtom.deref();
