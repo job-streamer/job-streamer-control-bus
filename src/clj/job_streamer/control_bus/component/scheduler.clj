@@ -144,8 +144,16 @@
     (.setDayStart holiday-calendar (to-ms-from-hh:mm (:calendar/day-start calendar)))
     (.addCalendar scheduler (:calendar/name calendar) holiday-calendar false false)))
 
-(defn delete-calendar[{:keys [scheduler]} calendar-name]
+(defn delete-calendar [{:keys [scheduler]} calendar-name]
   (.deleteCalendar scheduler calendar-name))
+
+(defn modify-calendar [{:keys [scheduler]} calendar]
+  (let [holiday-calendar (HolidayAndWeeklyCalendar.)]
+    (doseq [holiday (:calendar/holidays calendar)]
+      (.addExcludedDate holiday-calendar holiday))
+    (.setDaysExcluded holiday-calendar (boolean-array (:calendar/weekly-holiday calendar)))
+    (.setDayStart holiday-calendar (to-ms-from-hh:mm (:calendar/day-start calendar)))
+    (.addCalendar scheduler (:calendar/name calendar) holiday-calendar true false)))
 
 (defn entry-resource [{:keys [datomic] :as scheduler} job-id & [cmd]]
   (liberator/resource
