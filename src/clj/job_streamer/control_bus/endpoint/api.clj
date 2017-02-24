@@ -45,6 +45,13 @@
        [app-name job-name]
      (jobs/executions-resource jobs app-name job-name))
 
+   (ANY "/test-executions"
+        []
+        (jobs/test-executions-resource jobs))
+   (ANY ["/test-execution/:id" :id #"\d+"]
+        [id]
+        (jobs/test-execution-resource jobs (Long/parseLong id)))
+
    ;; Scheduler
    (ANY ["/:app-name/job/:job-name/schedule" :app-name #".*" :job-name #".*"]
        [app-name job-name]

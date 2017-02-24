@@ -17,11 +17,13 @@
                                       [util :refer [parse-body edn->datoms to-int]])
             (job-streamer.control-bus.component [datomic :as d]
                                                 [agents  :as ag]
-                                                [scheduler :as scheduler]))
-  (:import [java.util Date])
-  (:import  [org.jsoup Jsoup]
+                                                [scheduler :as scheduler]
+                                                [apps :as apps]))
+  (:import [java.util Date]
+           [org.jsoup Jsoup]
            [org.jsoup.nodes Element Node]
-           [org.jsoup.parser Tag Parser]))
+           [org.jsoup.parser Tag Parser]
+           [net.unit8.job_streamer.control_bus.bpmn BpmnParser]))
 
 (defn find-latest-execution
   "Find latest from given executions."
@@ -330,42 +332,45 @@
            instance-id step-execution-id))
 
 
-(defn save-execution [{:keys [datomic]} id execution]
+(defn save-execution [{:keys [datomic] :as jobs} id execution]
   (log/debug "progress update: " id execution)
-  (let [job (d/query datomic
-                     '{:find [(pull ?job [:job/name
-                                          {:job/status-notifications
-                                           [{:status-notification/batch-status [:db/ident]}
-                                            :status-notification/exit-status
-                                            :status-notification/type]}]) .]
-                       :in [$ ?id]
-                       :where [[?job :job/executions ?id]]} id)]
-    (->> (:job/status-notifications job)
-         (filter #(or (= (get-in % [:status-notification/batch-status :db/ident])
-                         (:batch-status execution))
-                      (and (:exit-status execution) (= (:status-notification/exit-status %) (:exit-status execution)))))
-         (map #(notification/send (:status-notification/type %)
-                                  (assoc execution :job-name (:job/name job))))
-         doall))
-  (d/transact datomic
-              [(merge {:db/id id
-                       :job-execution/batch-status (:batch-status execution)}
-                      (when-let [exit-status (:exit-status execution)]
-                        {:job-execution/exit-status exit-status})
-                      (when-let [start-time (:start-time execution)]
-                        {:job-execution/start-time start-time})
-                      (when-let [end-time (:end-time execution)]
-                        {:job-execution/end-time end-time})
-                      (when-let [step-executions (and (empty? (d/query datomic
-                                                                        '{:find [?step-executions]
-                                                                          :in [$]
-                                                                          :where [[?step-executions :job-execution/step-executions ?job-execution-id]]} id))
-                                                      (:step-executions execution))]
-                        {:job-execution/step-executions (map (fn [m]
-                                                               (->> m
-                                                                    (map #(vector (keyword "step-execution" (name (key %))) (val %)))
-                                                                    (into {:db/id (d/tempid :db.part/user)})))
-                                                             step-executions)}))]))
+  (if (-> jobs :test-executions deref (get id))
+    (swap! (:test-executions jobs) update-in [id] merge {:batch-status (:batch-status execution)
+                                                         :execution-id (:execution-id execution)})
+    (let [job (d/query datomic
+                       '{:find [(pull ?job [:job/name
+                                            {:job/status-notifications
+                                             [{:status-notification/batch-status [:db/ident]}
+                                              :status-notification/exit-status
+                                              :status-notification/type]}]) .]
+                         :in [$ ?id]
+                         :where [[?job :job/executions ?id]]} id)]
+      (->> (:job/status-notifications job)
+           (filter #(or (= (get-in % [:status-notification/batch-status :db/ident])
+                           (:batch-status execution))
+                        (and (:exit-status execution) (= (:status-notification/exit-status %) (:exit-status execution)))))
+           (map #(notification/send (:status-notification/type %)
+                                    (assoc execution :job-name (:job/name job))))
+           doall)
+      (d/transact datomic
+                  [(merge {:db/id id
+                           :job-execution/batch-status (:batch-status execution)}
+                          (when-let [exit-status (:exit-status execution)]
+                            {:job-execution/exit-status exit-status})
+                          (when-let [start-time (:start-time execution)]
+                            {:job-execution/start-time start-time})
+                          (when-let [end-time (:end-time execution)]
+                            {:job-execution/end-time end-time})
+                          (when-let [step-executions (and (empty? (d/query datomic
+                                                                           '{:find [?step-executions]
+                                                                             :in [$]
+                                                                             :where [[?step-executions :job-execution/step-executions ?job-execution-id]]} id))
+                                                          (:step-executions execution))]
+                            {:job-execution/step-executions (map (fn [m]
+                                                                   (->> m
+                                                                        (map #(vector (keyword "step-execution" (name (key %))) (val %)))
+                                                                        (into {:db/id (d/tempid :db.part/user)})))
+                                                                 step-executions)}))]))))
 
 (defn save-status-notification
   "Save a given status notification."
@@ -434,6 +439,54 @@
         #"\s*,\s*")
        (map keyword)
        set))
+
+
+(defn convert-to-test-job [jobxml-str]
+ (let [jobxml (Jsoup/parse  jobxml-str "" (Parser/xmlParser))
+       steps (.select jobxml "step")
+       batchlets (.select jobxml "step > batchlet")
+       chunks (.select jobxml "step > chunk")]
+     (.remove batchlets)
+     (.remove chunks)
+   (doall
+     (map #(.appendChild % (some-> (Tag/valueOf "batchlet") (Element. "") (.attr "ref" "org.jobstreamer.batch.TestBatchlet"))) steps))
+   (.toString jobxml)))
+
+(defn make-job [job-bpmn-xml]
+  (log/info "make job-xml form bpmn" \newline job-bpmn-xml)
+  (str "<?xml version=\"1.0\" encoding=\"UTF-8\"?> " \newline (some-> (new BpmnParser) (.parse job-bpmn-xml) .toString)))
+
+(defn search-state-id [jobs execution-id]
+  (loop[times 1]
+    (Thread/sleep 1000)
+    (let [state (->> @(:test-executions jobs) (filter #(= (-> % val :execution-id) execution-id)) first)]
+      (if (empty? state)
+        (recur (inc times))
+        (key state)))))
+
+
+(defn write-error-message-on-state [jobs execution-id message exception]
+  (let [state-id (search-state-id jobs execution-id)]
+    (swap! (:test-executions jobs) assoc state-id {:log-message message
+                                                   :log-exception exception
+                                                   :batch-status (-> @(:test-executions jobs) (get state-id) :batch-status)})))
+
+(defn dispatch-test-job [{:keys [datomic agents apps] :as jobs} ctx]
+  (let [job-bpmn-xml (get-in ctx [:edn :bpmn])
+        agt (ag/find-agent agents)
+        state-id (->> jobs :test-executions deref keys (into [0]) (apply max) inc)]
+    (swap! (:test-executions jobs) assoc state-id {:batch-status :batch-status/undispatched})
+    (if (nil? agt)
+      (swap! (:test-executions jobs) assoc state-id {:batch-status :batch-status/failed
+                                                     :log-message "No agent available"
+                                                     :log-exeption "Please run agent for exetute"})
+      (ag/execute-job agt
+                    {:request-id state-id
+                     :class-loader-id (:application/class-loader-id
+                                        (apps/find-by-name apps "default"))
+                     :job (-> job-bpmn-xml make-job convert-to-test-job)
+                     :restart? false}))
+    {:state-id state-id}))
 
 (defn list-resource
   [{:keys [datomic scheduler] :as jobs} app-name & {:keys [download?] :or {download? false}}]
@@ -790,11 +843,29 @@
    :handle-ok (fn [ctx]
                 (find-execution jobs id))))
 
+(defn test-executions-resource [{:keys [agents datomic apps] :as jobs}]
+  (liberator/resource
+   :available-media-types ["application/edn" "application/json"]
+   :allowed-methods [:post]
+   :malformed? #(parse-body %)
+   :handle-created #(dispatch-test-job jobs %)))
+
+(defn test-execution-resource [{:keys [agents scheduler datomic] :as jobs} id & [cmd]]
+  (liberator/resource
+   :available-media-types ["application/edn" "application/json"]
+   :allowed-methods [:get :delete]
+   :exists? (fn [_]
+              (get @(:test-executions jobs) id))
+   :delete! (fn [_]
+              (swap! (:test-executions jobs) dissoc id))
+   :handle-ok (fn [ctx]
+                (get @(:test-executions jobs) id))))
+
 (defrecord Jobs []
   component/Lifecycle
 
   (start [component]
-    component)
+    (assoc component :test-executions (atom {})))
 
   (stop [component]
     (dissoc component :list-resource :entry-resource)))
