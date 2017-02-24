@@ -546,8 +546,7 @@
                     {:results res
                      :hits    (count job-list)
                      :limit   (to-int limit 20)
-                     :offset  (to-int offset 0)})))
-   :etag (str (int (/ (System/currentTimeMillis) 10000)))))
+                     :offset  (to-int offset 0)})))))
 
 (defn entry-resource [{:keys [datomic scheduler] :as jobs} app-name job-name]
   (liberator/resource
