@@ -521,6 +521,9 @@
                           job-id))]
                 (doseq [notification (:job/status-notifications job)]
                   (save-status-notification jobs resolved-job-id notification))
+                (d/transact datomic
+                                   [{:db/id resolved-job-id
+                                     :job/exclusive? (:job/exclusive? job)}])
                 (when-let [schedule (:job/schedule job)]
                   (scheduler/schedule
                    scheduler resolved-job-id

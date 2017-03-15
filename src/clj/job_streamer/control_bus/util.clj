@@ -23,8 +23,7 @@
     (concat [{:db/id job-id
               :job/name (:job/name job)
               :job/svg-notation (get job :job/svg-notation "")
-              :job/bpmn-xml-notation (get job :job/bpmn-xml-notation "")
-              :job/exclusive? (get job :job/exclusive? false)}]
+              :job/bpmn-xml-notation (get job :job/bpmn-xml-notation "")}]
             (when-let [time-monitor (:job/time-monitor job)]
               [(assoc time-monitor :db/id #db/id[db.part/user -1])
                [:db/add job-id :job/time-monitor #db/id[db.part/user -1]]])

@@ -6,6 +6,8 @@ import org.quartz.Job;
 import org.quartz.JobDataMap;
 import org.quartz.JobExecutionContext;
 import org.quartz.JobExecutionException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.net.HttpURLConnection;
 
@@ -16,11 +18,13 @@ import net.unit8.job_streamer.control_bus.util.SystemUtil;
  */
 
 public class JobStreamerExecuteJob implements Job {
+    private final static Logger logger = LoggerFactory.getLogger(JobStreamerExecuteJob.class);
     @Override
     public void execute(JobExecutionContext context) throws JobExecutionException {
         JobDataMap data = context.getMergedJobDataMap();
         String jobName = data.getString("job-name");
         String appName = data.getString("app-name");
+        logger.info("execute job that " + "jobName:" + jobName + " appName:" + appName + " execution-id:" + data.getString("execution-id") + " command:" + data.getString("command"));
 
         Object system = SystemUtil.getSystem();
         Object jobs = RT.get(system, Keyword.intern("jobs"));
