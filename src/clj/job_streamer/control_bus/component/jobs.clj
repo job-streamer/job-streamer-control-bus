@@ -523,7 +523,7 @@
                   (save-status-notification jobs resolved-job-id notification))
                 (d/transact datomic
                                    [{:db/id resolved-job-id
-                                     :job/exclusive? (:job/exclusive? job)}])
+                                     :job/exclusive? (:job/exclusive? job false)}])
                 (when-let [schedule (:job/schedule job)]
                   (scheduler/schedule
                    scheduler resolved-job-id
