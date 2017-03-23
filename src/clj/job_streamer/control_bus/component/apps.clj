@@ -51,11 +51,18 @@
                                     classpaths))
             proc (.exec (Runtime/getRuntime) cmd)]
         (log/debug (clojure.string/join " " cmd))
+        (letfn [(print-err []
+                      (with-open [rdr (io/reader (.getErrorStream proc))]
+                        (->> (line-seq rdr)
+                             (map #(log/error %))
+                             doall)))]
+          (.start (Thread. print-err)))
         (with-open [rdr (io/reader (.getInputStream proc))]
           (->> (line-seq rdr)
                (map #(clojure.string/split % #":" 2))
                (map (fn [[category class-name]]
-                      {(keyword "batch-component" category) class-name}))
+                      (let [c {(keyword "batch-component" category) class-name}]
+                        (log/debugf "%s was scaned." (pr-str c)) c)))
                (reduce #(merge-with conj %1 %2)
                        {:batch-component/batchlet []
                         :batch-component/item-reader []
