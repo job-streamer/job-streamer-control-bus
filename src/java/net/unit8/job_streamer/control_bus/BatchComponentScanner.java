@@ -67,8 +67,8 @@ public class BatchComponentScanner {
     }
 
     String decideRefName(Class<?> clazz) {
-        System.err.println(clazz);
-        System.err.println(clazz.getAnnotations());
+        System.err.println("decideRefName: clazz: " + clazz);
+        System.err.println("decideRefName: annotation: " + clazz.getAnnotations());
         Annotation[] annotations = clazz.getDeclaredAnnotations();
         for (Annotation annotation : annotations) {
             if (annotation instanceof Named && !Strings.isNullOrEmpty(((Named) annotation).value())) {
@@ -83,29 +83,41 @@ public class BatchComponentScanner {
             String className = resourcePath
                     .substring(0, resourcePath.lastIndexOf(".class"))
                     .replace('/', '.').replace('\\', '.');
+            System.err.println("className: " + className);
             if (className.startsWith("java.")
                     || className.startsWith("javax.")
                     || className.startsWith("com.sun.")
                     || className.startsWith("sun.")
                     || className.startsWith("clojure.")) {
+                System.err.println("This is ignored with wrong package name");
                 return;
             }
             try {
                 Class<?> clazz = cl.loadClass(className);
                 if (Batchlet.class.isAssignableFrom(clazz)) {
-                    container.batchlets.add(decideRefName(clazz));
+                  System.err.println("  This clazz is Batchlet");
+                  container.batchlets.add(decideRefName(clazz));
                 } else if (ItemReader.class.isAssignableFrom(clazz)) {
-                    container.itemReaders.add(decideRefName(clazz));
+                  System.err.println("  This clazz is ItemReader");
+                  container.itemReaders.add(decideRefName(clazz));
                 } else if (ItemWriter.class.isAssignableFrom(clazz)) {
-                    container.itemWriters.add(decideRefName(clazz));
+                  System.err.println("  This clazz is ItemWriter");
+                  container.itemWriters.add(decideRefName(clazz));
                 } else if (ItemProcessor.class.isAssignableFrom(clazz)) {
-                    container.itemProcessors.add(decideRefName(clazz));
+                  System.err.println("  This clazz is ItemProcessor");
+                  container.itemProcessors.add(decideRefName(clazz));
                 } else if (isListener(clazz)) {
-                    container.listeners.add(decideRefName(clazz));
+                  System.err.println("  This clazz is Listener");
+                  container.listeners.add(decideRefName(clazz));
                 } else if (Throwable.class.isAssignableFrom(clazz)) {
-                    container.throwables.add(decideRefName(clazz));
+                  System.err.println("  This clazz is Throwable");
+                  container.throwables.add(decideRefName(clazz));
+                } else {
+                  System.err.println("  This clazz is ignored");
                 }
             } catch (ClassNotFoundException | NoClassDefFoundError e) {
+                System.err.println("  This clazz is ignored with Exception");
+                e.printStackTrace();
                 // ignore
             }
         }
