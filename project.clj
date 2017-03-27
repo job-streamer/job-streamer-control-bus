@@ -9,7 +9,7 @@
                  [javax/javaee-api "7.0"]
                  [environ "1.0.3"]
                  [bouncer "1.0.0" :exclusions [org.clojure/clojurescript]]
-                 [net.unit8.wscl/websocket-classloader "0.3.0"]
+                 [net.unit8.wscl/websocket-classloader "0.3.1"]
                  [net.unit8.logback/logback-websocket-appender "0.1.0"]
                  [io.undertow/undertow-websockets-jsr "1.3.22.Final"]
                  [com.datomic/datomic-free "0.9.5394" :exclusions [org.slf4j/slf4j-api org.slf4j/slf4j-nop
