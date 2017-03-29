@@ -24,6 +24,7 @@ public class JobStreamerExecuteJob implements Job {
         JobDataMap data = context.getMergedJobDataMap();
         String jobName = data.getString("job-name");
         String appName = data.getString("app-name");
+        if (jobName == null || appName == null) return;
         logger.info("execute job that " + "jobName:" + jobName + " appName:" + appName + " execution-id:" + data.getString("execution-id") + " command:" + data.getString("command"));
 
         Object system = SystemUtil.getSystem();
