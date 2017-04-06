@@ -89,36 +89,35 @@ public class BatchComponentScanner {
                     || className.startsWith("com.sun.")
                     || className.startsWith("sun.")
                     || className.startsWith("clojure.")) {
-                System.err.println("This is ignored with wrong package name");
+                System.err.println("This is ignored according to package name.");
                 return;
             }
             try {
                 Class<?> clazz = cl.loadClass(className);
                 if (Batchlet.class.isAssignableFrom(clazz)) {
-                  System.err.println("  This clazz is Batchlet");
+                  System.err.println("  This clazz is Batchlet.");
                   container.batchlets.add(decideRefName(clazz));
                 } else if (ItemReader.class.isAssignableFrom(clazz)) {
-                  System.err.println("  This clazz is ItemReader");
+                  System.err.println("  This clazz is ItemReader.");
                   container.itemReaders.add(decideRefName(clazz));
                 } else if (ItemWriter.class.isAssignableFrom(clazz)) {
-                  System.err.println("  This clazz is ItemWriter");
+                  System.err.println("  This clazz is ItemWriter.");
                   container.itemWriters.add(decideRefName(clazz));
                 } else if (ItemProcessor.class.isAssignableFrom(clazz)) {
-                  System.err.println("  This clazz is ItemProcessor");
+                  System.err.println("  This clazz is ItemProcessor.");
                   container.itemProcessors.add(decideRefName(clazz));
                 } else if (isListener(clazz)) {
-                  System.err.println("  This clazz is Listener");
+                  System.err.println("  This clazz is Listener.");
                   container.listeners.add(decideRefName(clazz));
                 } else if (Throwable.class.isAssignableFrom(clazz)) {
-                  System.err.println("  This clazz is Throwable");
+                  System.err.println("  This clazz is Throwable.");
                   container.throwables.add(decideRefName(clazz));
                 } else {
-                  System.err.println("  This clazz is ignored");
+                  System.err.println("  This clazz is ignored.");
                 }
-            } catch (ClassNotFoundException | NoClassDefFoundError e) {
-                System.err.println("  This clazz is ignored with Exception");
+            } catch (Throwable e) {
+                System.err.println("  This clazz is ignored with Throwable.");
                 e.printStackTrace();
-                // ignore
             }
         }
     }

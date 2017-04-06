@@ -54,7 +54,7 @@
         (letfn [(print-err []
                       (with-open [rdr (io/reader (.getErrorStream proc))]
                         (->> (line-seq rdr)
-                             (map #(log/error %))
+                             (map #(log/debug %))
                              doall)))]
           (.start (Thread. print-err)))
         (with-open [rdr (io/reader (.getInputStream proc))]
