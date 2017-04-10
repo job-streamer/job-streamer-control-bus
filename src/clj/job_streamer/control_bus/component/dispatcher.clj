@@ -24,6 +24,7 @@
                                   (jobs/save-execution jobs (:db/id execution) new-exec))))))
 
 (defn- dispatch [{:keys [dispatcher-ch datomic]} agt execution-request]
+  (log/debug "dispatch job to agent" agt)
   (ag/execute-job
    agt execution-request
 
@@ -40,6 +41,7 @@
 
    :on-success
    (fn [{:keys [execution-id batch-status start-time] :as res}]
+     (log/debug "success to dispatch")
      (if execution-id
        (d/transact datomic
                    [(merge {:db/id (:request-id execution-request)
@@ -54,6 +56,7 @@
                      :job-execution/batch-status :batch-status/abandoned}])))))
 
 (defn submit [{:keys [dispatcher-ch datomic]} execution-request]
+  (log/debug "submit execution-request " execution-request)
   (try
     (put! dispatcher-ch execution-request)
     (d/transact datomic
@@ -67,6 +70,7 @@
     (when-let [_ (<! submitter-ch)]
       (let [undispatched (jobs/find-undispatched jobs)]
         (doseq [[execution-request job-bpmn-xml parameter] undispatched]
+          (log/debug "find undispatched job" execution-request)
           (submit dispatcher
                   {:request-id execution-request
                    :class-loader-id (:application/class-loader-id

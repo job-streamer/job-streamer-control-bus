@@ -686,6 +686,7 @@
                                     (assoc time-monitor :time-monitor/action action)))))))))
 
 (defn- execute-job [{:keys [datomic scheduler] :as jobs} app-name job-name ctx]
+  (log/debug "execute job " job-name)
   (when-let [[app-id job-id] (find-by-name jobs app-name job-name)]
     (let [execution-id (d/tempid :db.part/user)
           tempids (-> (d/transact
@@ -696,11 +697,13 @@
                          :job-execution/job-parameters (pr-str (or (:edn ctx) {}))}
                         [:db/add job-id :job/executions execution-id]])
                       :tempids)]
+      (log/debug "set execution-id " (-> tempids vals first))
       (when-let [time-monitor (d/pull datomic
                                       '[{:job/time-monitor
                                          [:time-monitor/duration
                                           {:time-monitor/action [:db/ident]}]}]
                                       job-id)]
+        (log/debug "set time-monitor")
         (scheduler/time-keeper
          scheduler
          (d/resolve-tempid datomic tempids execution-id)
