@@ -42,7 +42,7 @@
         {:status 500
          :headers {"Access-Control-Allow-Origin" "http://localhost:3000"
                    "Access-Control-Allow-Credentials" "true"}
-         :body (pr-str {:message "Internal server error."})}))))
+         :body (pr-str {:message (str "Internal server error: " (.getMessage e))})}))))
 
 (defn wrap-same-origin-policy [handler {:keys [alias access-control-allow-origin]}]
   (fn [req]

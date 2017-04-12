@@ -171,12 +171,7 @@
              :resume (resume scheduler job-id)))
    :delete! (fn [ctx]
               (unschedule scheduler job-id))
-   :handle-ok (fn [ctx])
-   :handle-exception (fn [{ex :exception}]
-                       (log/error "scheduler resource:" ex)
-                       (ring-response
-                        {:status 500
-                         :body (pr-str {:message (.getMessage ex)})}))))
+   :handle-ok (fn [ctx])))
 
 (defrecord Scheduler [datomic host port]
   component/Lifecycle
