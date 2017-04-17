@@ -13,11 +13,13 @@
 
 (def environ
   (let [port (some-> env :control-bus-port Integer.)
+        datomic-uri (:datomic-uri env)
         access-control-allow-origin (some-> env :access-control-allow-origin)]
   {:http {:port port}
    :app {:same-origin {:access-control-allow-origin access-control-allow-origin}}
    :discoverer {:ws-port port}
    :scheduler  {:host "localhost"
                 :port port}
-   :auth {:access-control-allow-origin access-control-allow-origin}}))
+   :auth {:access-control-allow-origin access-control-allow-origin}
+   :datomic {:uri datomic-uri}}))
 
