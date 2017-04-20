@@ -9,7 +9,8 @@
    :scheduler  {:host "localhost"
                 :port 45102}
    :migration {:dbschema model/dbschema}
-   :auth {:access-control-allow-origin "http://localhost:3000"}})
+   :auth {:access-control-allow-origin "http://localhost:3000"}
+   :datomic {:uri "datomic:free://localhost:4334/job-streamer"}})
 
 (def environ
   (let [port (some-> env :control-bus-port Integer.)
