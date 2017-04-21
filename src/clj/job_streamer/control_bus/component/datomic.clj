@@ -47,5 +47,4 @@
       (d/resolve-tempid db tempids tempid))))
 
 (defn datomic-component [options]
-  (let [uri (:uri options "datomic:free://localhost:4334/job-streamer")]
-    (map->DatomicDataSource (meta-merge options {:uri uri}))))
+  (map->DatomicDataSource options))

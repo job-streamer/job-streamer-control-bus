@@ -33,14 +33,14 @@
             [buddy.auth.accessrules :refer [wrap-access-rules]]
             [buddy.auth.http :as http]))
 
-(defn wrap-internal-server-error [handler]
+(defn wrap-internal-server-error [handler {:keys [access-control-allow-origin]}]
   (fn [req]
     (try
       (handler req)
       (catch Exception e
         (log/error e)
         {:status 500
-         :headers {"Access-Control-Allow-Origin" "http://localhost:3000"
+         :headers {"Access-Control-Allow-Origin" access-control-allow-origin
                    "Access-Control-Allow-Credentials" "true"}
          :body (pr-str {:message (str "Internal server error: " (.getMessage e))})}))))
 
@@ -82,7 +82,7 @@
                       [wrap-authn          :token :session-base]
                       [wrap-same-origin-policy :same-origin]
                       [wrap-multipart-params]
-                      [wrap-internal-server-error]
+                      [wrap-internal-server-error :same-origin]
                       [wrap-defaults :defaults]]
          :access-rules {:rules access-rules :policy :allow}
          :session-base (session-backend)
