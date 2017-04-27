@@ -6,6 +6,7 @@
             [compojure.core :refer [ANY GET POST routes]]
             [bouncer.validators :as v]
             [ring.util.response :refer [content-type]]
+            [datomic.api :as d]
             (job-streamer.control-bus.component
              [apps :as apps]
              [jobs :as jobs]
@@ -19,7 +20,7 @@
              [validation :refer [validate]]
              [util :refer [parse-body]])))
 
-(defn api-endpoint [{:keys [jobs agents calendar scheduler apps auth]}]
+(defn api-endpoint [{:keys [jobs agents calendar scheduler apps auth datomic]}]
   (routes
    ;; Auth
    (ANY "/auth" request (auth/auth-resource auth))
@@ -97,6 +98,12 @@
      (apps/stats-resource apps app-name))
    (GET "/version" [] (-> {:body  (clojure.string/replace (str "\"" (slurp "VERSION") "\"") "\n" "")}
                                        (content-type "text/plain")))
+   ;; Health Check
+   (GET "/healthcheck" []
+     (try
+       (d/connect (:uri datomic))
+       {:status 200}
+       (catch Exception e {:status 503})))
 
    ;; For debug
    ;(GET "/logs" [] (pr-str (model/query '{:find [[(pull ?log [*]) ...]] :where [[?log :execution-log/level]]})))

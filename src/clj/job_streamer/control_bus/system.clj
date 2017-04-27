@@ -24,7 +24,6 @@
              [auth       :refer [auth-component]])
             (job-streamer.control-bus.endpoint
              [api :refer [api-endpoint]])
-            [job-streamer.control-bus.endpoint.api :refer [api-endpoint]]
             [clojure.tools.logging :as log]
             [buddy.auth :refer [authenticated?]]
             [buddy.auth.backends.session :refer [session-backend]]
@@ -58,7 +57,7 @@
             (header "Access-Control-Allow-Origin" access-control-allow-origin)
             (header "Access-Control-Allow-Credentials" "true"))))))
 
-(def access-rules [{:pattern #"^/(?!auth|user).*$"
+(def access-rules [{:pattern #"^/(?!auth|user|healthcheck|version).*$"
                     :handler authenticated?}])
 
 (defn token-base [token-provider]
@@ -116,7 +115,7 @@
         (component/system-using
          {:http      [:app :socketapp]
           :app       [:api :token]
-          :api       [:apps :calendar :agents :jobs :scheduler :auth]
+          :api       [:apps :calendar :agents :jobs :scheduler :auth :datomic]
           :socketapp [:datomic :jobs :agents]
           :jobs      [:datomic :scheduler :agents :apps]
           :agents    [:datomic]
