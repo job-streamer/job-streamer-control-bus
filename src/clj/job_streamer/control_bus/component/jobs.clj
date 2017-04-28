@@ -756,6 +756,7 @@
                    :post (:permission/execute-job permissions)
                    :delete (:permission/delete-job permissions)
                    false)))
+   :put! #(execute-job jobs app-name job-name %)
    :post! #(execute-job jobs app-name job-name %)
    :delete! (fn [ctx]
               (doall
