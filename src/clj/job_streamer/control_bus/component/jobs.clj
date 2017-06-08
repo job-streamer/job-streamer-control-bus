@@ -519,6 +519,20 @@
                                         (conj datoms
                                               [:db/add [:application/name app-name] :application/jobs job-id])))
                           job-id))]
+                (let [job-name (:job/name job)]
+                  (when-not (nil? posted-job-id)
+                    (let [notifications (d/query
+                                              datomic
+                                              '{:find [?notification]
+                                                :in [$ ?app-name ?job-name]
+                                                :where [[?app :application/name ?app-name]
+                                                        [?app :application/jobs ?job]
+                                                        [?job :job/name ?job-name]
+                                                        [?job :job/status-notifications ?notification]]}
+                                              app-name job-name)]
+                      (doseq [notification notifications]
+                        (d/transact datomic
+                                    [[:db/retract posted-job-id :job/status-notifications (.get notification 0)]])))))
                 (doseq [notification (:job/status-notifications job)]
                   (save-status-notification jobs resolved-job-id notification))
                 (d/transact datomic
