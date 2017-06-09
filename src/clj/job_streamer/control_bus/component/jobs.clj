@@ -532,12 +532,14 @@
                                               app-name job-name)]
                       (doseq [notification notifications]
                         (d/transact datomic
-                                    [[:db/retract posted-job-id :job/status-notifications (.get notification 0)]])))))
+                                    [[:db/retract posted-job-id :job/status-notifications (get notification 0)]])))))
                 (doseq [notification (:job/status-notifications job)]
                   (save-status-notification jobs resolved-job-id notification))
                 (d/transact datomic
                                    [{:db/id resolved-job-id
-                                     :job/exclusive? (:job/exclusive? job false)}])
+                                     :job/exclusive? (:job/exclusive? job false)
+                                     :job/bpmn-xml-notation (:job/bpmn-xml-notation job)
+                                     :job/svg-notation (:job/svg-notation job)}])
                 (let [schedule (:job/schedule job)]
                   (if (nil? schedule)
                     (when-not (nil? posted-job-id)
