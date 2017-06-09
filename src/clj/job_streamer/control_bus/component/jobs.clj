@@ -538,11 +538,14 @@
                 (d/transact datomic
                                    [{:db/id resolved-job-id
                                      :job/exclusive? (:job/exclusive? job false)}])
-                (when-let [schedule (:job/schedule job)]
-                  (scheduler/schedule
-                   scheduler resolved-job-id
-                   (:schedule/cron-notation schedule)
-                   nil)) ;; FIXME A Calendar cannnot be set here.
+                (let [schedule (:job/schedule job)]
+                  (if (nil? schedule)
+                    (when-not (nil? posted-job-id)
+                      (scheduler/unschedule scheduler posted-job-id))
+                    (scheduler/schedule
+                      scheduler resolved-job-id
+                      (:schedule/cron-notation schedule)
+                      nil))) ;; FIXME A Calendar cannnot be set here.
                 job)))
    :handle-ok (fn [{{{query :q with-params :with sort-order :sort-by
                       :keys [limit offset]} :params} :request}]
