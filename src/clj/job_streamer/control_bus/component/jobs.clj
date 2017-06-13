@@ -519,7 +519,7 @@
                                       (conj datoms
                                             [:db/add [:application/name app-name] :application/jobs job-id])))
                         job-id))
-                  exclusive-query (when-not (nil? (:job/exclusive? job)) [:db/add resolved-job-id :job/exclusive? (:job/exclusive? job)])
+                  exclusive-query (when-some [exclusive? (:job/exclusive? job)] [:db/add resolved-job-id :job/exclusive? exclusive?])
                   bpmn-xml-notation-query (when-let [bpmn-xml-notation (:job/bpmn-xml-notation job)] [:db/add resolved-job-id :job/bpmn-xml-notation bpmn-xml-notation])
                   svg-notation-query (when-let [svg-notation (:job/svg-notation job)] [:db/add resolved-job-id :job/svg-notation svg-notation])
                   job-query (filter identity [exclusive-query bpmn-xml-notation-query svg-notation-query])]
