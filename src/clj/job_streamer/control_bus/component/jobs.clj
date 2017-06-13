@@ -527,7 +527,7 @@
               (when posted-job-id
                 (let [notifications (d/query
                                       datomic
-                                      '{:find [?notifications]
+                                      '{:find [[?notifications ...]]
                                         :in [$ ?app-name ?job-name]
                                         :where [[?app :application/name ?app-name]
                                                 [?app :application/jobs ?job]
@@ -536,7 +536,7 @@
                                       app-name (:job/name job))]
                   (doseq [notification notifications]
                     (d/transact datomic
-                                [[:db/retract posted-job-id :job/status-notifications (notification 0)]]))))
+                                [[:db/retract posted-job-id :job/status-notifications notification]]))))
               (doseq [notification (:job/status-notifications job)]
                 (save-status-notification jobs resolved-job-id notification))
               (if-let [schedule (:job/schedule job)]
