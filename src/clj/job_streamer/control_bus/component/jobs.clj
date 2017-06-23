@@ -389,6 +389,28 @@
                     :tempids)]
     {:db/id (d/resolve-tempid datomic tempids status-notification-id)}))
 
+(defn save-status-notifications
+  "Save given status notifications."
+  [{:keys [datomic] :as jobs} job-id settings-list]
+  (let [notification-count (count settings-list)
+        status-notification-ids (repeat notification-count (d/tempid :db.part/user))
+        tempids (-> (d/transact
+                      datomic
+                      (->> settings-list
+                           (map #([:db/add job-id
+                                   :job/status-notifications %1]
+                                   (merge {:db/id %1
+                                           :status-notification/type (:status-notification/type %2)}
+                                          (when-let [batch-status (:status-notification/batch-status %2)]
+                                            {:status-notification/batch-status batch-status})
+                                          (when-let [exit-status (:status-notification/exit-status %2)]
+                                            {:status-notification/exit-status exit-status})))
+                                status-notification-ids)))
+                    :tempids)]
+    {:db/ids (->> status-notification-ids
+                  (map #(d/resolve-tempid datomic tempids %))
+                  vec)}))
+
 (defn- append-schedule [scheduler job-id executions schedule]
   (if (:schedule/active? schedule)
     (let [schedules (scheduler/fire-times scheduler job-id)]
@@ -522,28 +544,26 @@
                   exclusive-query (when-some [exclusive? (:job/exclusive? job)] [:db/add resolved-job-id :job/exclusive? exclusive?])
                   bpmn-xml-notation-query (when-let [bpmn-xml-notation (:job/bpmn-xml-notation job)] [:db/add resolved-job-id :job/bpmn-xml-notation bpmn-xml-notation])
                   svg-notation-query (when-let [svg-notation (:job/svg-notation job)] [:db/add resolved-job-id :job/svg-notation svg-notation])
-                  job-query (filter identity [exclusive-query bpmn-xml-notation-query svg-notation-query])]
+                  notifications-delete-query (when posted-job-id
+                                        (let [notifications (d/query datomic
+                                                                     '{:find [[?notifications ...]]
+                                                                       :in [$ ?app-name ?job-name]
+                                                                       :where [[?app :application/name ?app-name]
+                                                                               [?app :application/jobs ?job]
+                                                                               [?job :job/name ?job-name]
+                                                                               [?job :job/status-notifications ?notifications]]}
+                                                                     app-name (:job/name job))]
+                                          (->> notifications
+                                               (map #([:db/retract posted-job-id :job/status-notifications %]))
+                                               vec)))
+                  job-query (filter identity (concat [exclusive-query bpmn-xml-notation-query svg-notation-query] notifications-delete-query))]
               (d/transact datomic job-query)
-              (when posted-job-id
-                (let [notifications (d/query
-                                      datomic
-                                      '{:find [[?notifications ...]]
-                                        :in [$ ?app-name ?job-name]
-                                        :where [[?app :application/name ?app-name]
-                                                [?app :application/jobs ?job]
-                                                [?job :job/name ?job-name]
-                                                [?job :job/status-notifications ?notifications]]}
-                                      app-name (:job/name job))]
-                  (doseq [notification notifications]
-                    (d/transact datomic
-                                [[:db/retract posted-job-id :job/status-notifications notification]]))))
-              (doseq [notification (:job/status-notifications job)]
-                (save-status-notification jobs resolved-job-id notification))
+              (save-status-notifications jobs resolved-job-id (:job/status-notifications job))
               (if-let [schedule (:job/schedule job)]
                 (scheduler/schedule
                   scheduler resolved-job-id
                   (:schedule/cron-notation schedule)
-                  nil) ;; FIXME A Calendar cannnot be set here.
+                  nil) ;; FIXME A Calendar cannot be set here.
                 (when posted-job-id
                   (scheduler/unschedule scheduler posted-job-id)))
               job))
