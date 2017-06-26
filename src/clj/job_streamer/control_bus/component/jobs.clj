@@ -389,6 +389,29 @@
                     :tempids)]
     {:db/id (d/resolve-tempid datomic tempids status-notification-id)}))
 
+(defn save-status-notifications
+  "Save given status notifications."
+  [{:keys [datomic] :as jobs} job-id settings-list]
+  (let [notification-count (count settings-list)
+        status-notification-ids (repeatedly notification-count #(d/tempid :db.part/user))
+        tempids (-> (d/transact
+                      datomic
+                      (apply concat (map (fn [notification-id notification]
+                                           [[:db/add job-id
+                                             :job/status-notifications notification-id]
+                                            (merge {:db/id notification-id
+                                                    :status-notification/type (:status-notification/type notification)}
+                                                   (when-let [batch-status (:status-notification/batch-status notification)]
+                                                     {:status-notification/batch-status batch-status})
+                                                   (when-let [exit-status (:status-notification/exit-status notification)]
+                                                     {:status-notification/exit-status exit-status}))])
+                                         status-notification-ids
+                                         settings-list)))
+                    :tempids)]
+    {:db/ids (->> status-notification-ids
+                  (map #(d/resolve-tempid datomic tempids %))
+                  vec)}))
+
 (defn- append-schedule [scheduler job-id executions schedule]
   (if (:schedule/active? schedule)
     (let [schedules (scheduler/fire-times scheduler job-id)]
@@ -509,27 +532,42 @@
                    false)))
    :post! (fn [{job :edn posted-job-id :job-id}]
             (let [datoms (edn->datoms job posted-job-id)
-                  job-id (:db/id (first datoms))]
-              (let [resolved-job-id
-                    (or posted-job-id
-                        (d/resolve-tempid
-                          datomic
-                          (:tempids
-                            (d/transact datomic
-                                        (conj datoms
-                                              [:db/add [:application/name app-name] :application/jobs job-id])))
-                          job-id))]
-                (doseq [notification (:job/status-notifications job)]
-                  (save-status-notification jobs resolved-job-id notification))
-                (d/transact datomic
-                                   [{:db/id resolved-job-id
-                                     :job/exclusive? (:job/exclusive? job false)}])
-                (when-let [schedule (:job/schedule job)]
-                  (scheduler/schedule
-                   scheduler resolved-job-id
-                   (:schedule/cron-notation schedule)
-                   nil)) ;; FIXME A Calendar cannnot be set here.
-                job)))
+                  job-id (:db/id (first datoms))
+                  resolved-job-id
+                  (or posted-job-id
+                      (d/resolve-tempid
+                        datomic
+                        (:tempids
+                          (d/transact datomic
+                                      (conj datoms
+                                            [:db/add [:application/name app-name] :application/jobs job-id])))
+                        job-id))
+                  exclusive-query (when-some [exclusive? (:job/exclusive? job)] [:db/add resolved-job-id :job/exclusive? exclusive?])
+                  bpmn-xml-notation-query (when-let [bpmn-xml-notation (:job/bpmn-xml-notation job)] [:db/add resolved-job-id :job/bpmn-xml-notation bpmn-xml-notation])
+                  svg-notation-query (when-let [svg-notation (:job/svg-notation job)] [:db/add resolved-job-id :job/svg-notation svg-notation])
+                  notifications-delete-query (when posted-job-id
+                                        (let [notifications (d/query datomic
+                                                                     '{:find [[?notifications ...]]
+                                                                       :in [$ ?app-name ?job-name]
+                                                                       :where [[?app :application/name ?app-name]
+                                                                               [?app :application/jobs ?job]
+                                                                               [?job :job/name ?job-name]
+                                                                               [?job :job/status-notifications ?notifications]]}
+                                                                     app-name (:job/name job))]
+                                          (->> notifications
+                                               (map (fn [notification] [:db/retract posted-job-id :job/status-notifications notification]))
+                                               vec)))
+                  job-query (filter identity (concat [exclusive-query bpmn-xml-notation-query svg-notation-query] notifications-delete-query))]
+              (d/transact datomic job-query)
+              (save-status-notifications jobs resolved-job-id (:job/status-notifications job))
+              (if-let [schedule (:job/schedule job)]
+                (scheduler/schedule
+                  scheduler resolved-job-id
+                  (:schedule/cron-notation schedule)
+                  nil) ;; FIXME A Calendar cannot be set here.
+                (when posted-job-id
+                  (scheduler/unschedule scheduler posted-job-id)))
+              job))
    :handle-ok (fn [{{{query :q with-params :with sort-order :sort-by
                       :keys [limit offset]} :params} :request}]
                 (let [job-list (->> (find-all jobs app-name query))
@@ -567,7 +605,15 @@
                    :delete (:permission/delete-job permissions)
                    false)))
    :put! (fn [{job :edn job-id :job-id}]
-           (d/transact datomic (edn->datoms job job-id)))
+           (d/transact datomic (edn->datoms job job-id))
+           (let [schedule (d/pull datomic
+                                  '[{:job/schedule
+                                     [:schedule/cron-notation
+                                      {:schedule/calendar
+                                       [:calendar/name]}]}] job-id)]
+             (when-let [cron-notation (:schedule/cron-notation (:job/schedule schedule))]
+               (scheduler/unschedule scheduler job-id)
+               (scheduler/schedule scheduler job-id cron-notation (:calendar/name (:schedule/calendar (:job/schedule schedule))))))) ; Because job execute by job name
    :delete! (fn [{job-id :job-id app-id :app-id}]
               (scheduler/unschedule scheduler job-id)
               (d/transact datomic
