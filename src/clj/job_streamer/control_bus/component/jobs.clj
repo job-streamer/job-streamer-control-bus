@@ -567,7 +567,15 @@
                    :delete (:permission/delete-job permissions)
                    false)))
    :put! (fn [{job :edn job-id :job-id}]
-           (d/transact datomic (edn->datoms job job-id)))
+           (d/transact datomic (edn->datoms job job-id))
+           (let [schedule (d/pull datomic
+                                  '[{:job/schedule
+                                     [:schedule/cron-notation
+                                      {:schedule/calendar
+                                       [:calendar/name]}]}] job-id)]
+             (when-let [cron-notation (:schedule/cron-notation (:job/schedule schedule))]
+               (scheduler/unschedule scheduler job-id)
+               (scheduler/schedule scheduler job-id cron-notation (:calendar/name (:schedule/calendar (:job/schedule schedule))))))) ; Because job execute by job name
    :delete! (fn [{job-id :job-id app-id :app-id}]
               (scheduler/unschedule scheduler job-id)
               (d/transact datomic
