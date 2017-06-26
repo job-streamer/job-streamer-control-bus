@@ -393,19 +393,20 @@
   "Save given status notifications."
   [{:keys [datomic] :as jobs} job-id settings-list]
   (let [notification-count (count settings-list)
-        status-notification-ids (repeat notification-count (d/tempid :db.part/user))
+        status-notification-ids (repeatedly notification-count #(d/tempid :db.part/user))
         tempids (-> (d/transact
                       datomic
-                      (->> settings-list
-                           (map #([:db/add job-id
-                                   :job/status-notifications %1]
-                                   (merge {:db/id %1
-                                           :status-notification/type (:status-notification/type %2)}
-                                          (when-let [batch-status (:status-notification/batch-status %2)]
-                                            {:status-notification/batch-status batch-status})
-                                          (when-let [exit-status (:status-notification/exit-status %2)]
-                                            {:status-notification/exit-status exit-status})))
-                                status-notification-ids)))
+                      (apply concat (map (fn [notification-id notification]
+                                           [[:db/add job-id
+                                             :job/status-notifications notification-id]
+                                            (merge {:db/id notification-id
+                                                    :status-notification/type (:status-notification/type notification)}
+                                                   (when-let [batch-status (:status-notification/batch-status notification)]
+                                                     {:status-notification/batch-status batch-status})
+                                                   (when-let [exit-status (:status-notification/exit-status notification)]
+                                                     {:status-notification/exit-status exit-status}))])
+                                         status-notification-ids
+                                         settings-list)))
                     :tempids)]
     {:db/ids (->> status-notification-ids
                   (map #(d/resolve-tempid datomic tempids %))
@@ -554,7 +555,7 @@
                                                                                [?job :job/status-notifications ?notifications]]}
                                                                      app-name (:job/name job))]
                                           (->> notifications
-                                               (map #([:db/retract posted-job-id :job/status-notifications %]))
+                                               (map (fn [notification] [:db/retract posted-job-id :job/status-notifications notification]))
                                                vec)))
                   job-query (filter identity (concat [exclusive-query bpmn-xml-notation-query svg-notation-query] notifications-delete-query))]
               (d/transact datomic job-query)
