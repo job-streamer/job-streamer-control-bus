@@ -25,6 +25,9 @@
                  [ch.qos.logback/logback-classic "1.1.7"]
                  [org.jboss.weld.se/weld-se "2.2.7.Final"]
                  [net.unit8.weld/weld-prescan "0.1.0"]
+                 [crypto-random "1.2.0"]
+                 [clj-http "3.6.1"]
+                 [ring/ring-codec "1.0.1"]
 
                  ;; for Scheduler
                  [org.quartz-scheduler/quartz "2.2.3"]

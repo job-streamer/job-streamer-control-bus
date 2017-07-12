@@ -13,6 +13,7 @@
 
 (def config
   (meta-merge config/defaults
+              config/resource-file
               config/environ
               prod-config))
 

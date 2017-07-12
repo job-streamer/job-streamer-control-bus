@@ -8,11 +8,27 @@
             [liberator.core :as liberator]
             [liberator.representation :refer [ring-response]]
             [clojure.string :as str]
+            [clojure.data.json :as json]
+            [clj-http.client :as client]
             [ring.util.response :refer [response content-type header redirect]]
             (job-streamer.control-bus [validation :refer [validate]]
-                                      [util :refer [parse-body]])
+                                      [util :refer [parse-body format-url generate-token]])
             (job-streamer.control-bus.component [datomic :as d]
                                                 [token :as token])))
+
+(defn- find-permissions [datomic user-id app-name]
+  (->> (d/query datomic
+                '{:find [?permission]
+                  :in [$ ?app-name ?user-id]
+                  :where [[?member :member/user ?user]
+                          [?member :member/rolls ?roll]
+                          [?roll :roll/permissions ?permission]
+                          [?user :user/id ?user-id]
+                          [?app :application/members ?member]
+                          [?app :application/name ?app-name]]}
+                app-name user-id)
+       (apply concat)
+       set))
 
 (defn- auth-by-password [datomic user-id password app-name]
   (when (and (not-empty user-id) (not-empty password))
@@ -30,18 +46,20 @@
                                        [?app :application/members ?member]
                                        [?app :application/name ?app-name]]}
                              user-id password app-name)]
-      (let [permissions (->> (d/query datomic
-                                      '{:find [?permission]
-                                        :in [$ ?app-name ?user-id]
-                                        :where [[?member :member/user ?user]
-                                                [?member :member/rolls ?roll]
-                                                [?roll :roll/permissions ?permission]
-                                                [?user :user/id ?user-id]
-                                                [?app :application/members ?member]
-                                                [?app :application/name ?app-name]]}
-                                      app-name user-id)
-                             (apply concat)
-                             set)]
+      (let [permissions (find-permissions datomic user-id app-name)]
+        (assoc user :permissions permissions)))))
+
+(defn- find-user [datomic user-id app-name]
+  (when (not-empty user-id)
+    (when-let [user (d/query datomic
+                             '{:find [(pull ?s [:*]) .]
+                               :in [$ ?uname ?app-name]
+                               :where [[?s :user/id ?uname]
+                                       [?member :member/user ?s]
+                                       [?app :application/members ?member]
+                                       [?app :application/name ?app-name]]}
+                             user-id app-name)]
+      (let [permissions (find-permissions datomic user-id app-name)]
         (assoc user :permissions permissions)))))
 
 (defvalidator unique-name-validator
@@ -96,6 +114,49 @@
                                         (update-in (select-keys app [:db/id :application/members]) [:application/members] #(conj % member-id))])]
         (log/infof "Signup %s as %s succeeded." (:user/id user) roll-name)
         result))))
+
+(defn fetch-access-token [{:keys [oauth-providers control-bus-url]} provider-id code]
+  (when (and (not-empty code) (oauth-providers provider-id))
+    (log/info "Fetch access-token with code :" code)
+    (let [{:keys [domain token-endpoint client-id]} (oauth-providers provider-id)
+          url (str domain "/" token-endpoint)
+          query {:code code
+                 :grant_type "authorization_code"
+                 :client_id client-id
+                 :redirect_uri (str control-bus-url "/oauth/" provider-id "/cb")}
+          {body :body status :status} (client/post url {:form-params query :throw-exceptions false})]
+      (when (= 200 status)
+        (let [{:keys [access_token]} (json/read-str body :key-fn keyword)]
+          (when access_token
+            (log/info "access-token :" access_token)
+            access_token))))))
+
+(defn check-access-token [{:keys [oauth-providers]} provider-id access-token]
+  (when (and (not-empty access-token) (oauth-providers provider-id))
+    (log/info "check access-token :" access-token)
+    (let [{:keys [domain introspection-endpoint]} (oauth-providers provider-id)
+          url (str domain "/" introspection-endpoint)
+          query {:token_type_hint "access_token"
+                 :token access-token}
+          {:keys [status body] :as res} (client/post url {:form-params query
+                                                          :content-type :x-www-form-urlencoded
+                                                          :throw-exceptions false})]
+      (when (= 200 status)
+        (let [{:keys [username active sub]} (json/read-str body :key-fn keyword)]
+          (when active
+            (log/infof "active access-token : %s, user-id : %s" access-token (or username sub))
+            {:user/id (or username sub)}))))))
+
+(defn oauth-by
+  [{:keys [datomic] :as auth-component} provider-id access-token]
+  (let [app-name "default"]
+    (if-let [identity (some-> (check-access-token auth-component provider-id access-token)
+                              :user/id
+                              (#(find-user datomic % app-name))
+                              (select-keys [:user/id :permissions]))]
+      identity
+      (-> (find-user datomic "guest" app-name)
+          (select-keys [:user/id :permissions])))))
 
 (defn auth-resource
   [{:keys [datomic token] :as component}]
@@ -154,6 +215,53 @@
                (d/transact datomic
                            [[:db.fn/retractEntity [:user/id user-id]]]))))
 
+(defn oauth-resource [{:keys [oauth-providers]}]
+  (liberator/resource
+   :available-media-types ["application/edn" "application/json"]
+   :allowed-methods [:get]
+   :exists? (fn [_]
+              {:providers (->> oauth-providers
+                               (map (fn [[id provider]]
+                                      [id (select-keys provider [:name :icon])]))
+                               (into {}))})
+   :handle-ok (fn [{:keys [providers]}]
+                providers)))
+
+(defn redirect-to-auth-provider [{:keys [oauth-providers control-bus-url console-url]} provider-id]
+  (fn [request]
+    (if-let [{:keys [domain auth-endpoint client-id scope]} (oauth-providers provider-id)]
+      (let [state (generate-token)
+            session-with-state (assoc (:session request) :state state)
+            endpoint {:url (str domain "/" auth-endpoint)
+                      :query {:client_id client-id
+                              :scope scope
+                              :response_type "code"
+                              :redirect_uri (str control-bus-url "/oauth/" provider-id "/cb")
+                              :state state}}]
+        (log/info "Redirect to auth provider :" provider-id)
+        (-> endpoint
+            format-url
+            redirect
+            (assoc :session session-with-state)))
+      (do (log/infof "Redirect attempt to auth provider, %s, failed because of no configuration." provider-id)
+          (-> (redirect (str console-url "/login"))
+              (assoc :body (pr-str {:messages [(str "No configuration : " provider-id)]})))))))
+
+(defn oauth-callback [{:keys [console-url] :as auth} provider-id]
+  (fn [request]
+    (let [{:keys [state code error]} (:params request)
+          session-state (get-in request [:session :state])]
+      (if (and (some? code)
+               (= state session-state))
+        (if-let [identity (some->> code
+                                (fetch-access-token auth provider-id)
+                                (oauth-by auth provider-id))]
+          (do (log/info "Login attempt succeeded :" (:user/id identity))
+              (-> (redirect console-url)
+                  (assoc-in [:session :identity] identity)))
+          (redirect (str console-url "/login")))
+        (redirect (str console-url "/login"))))))
+
 (defrecord Auth [datomic]
   component/Lifecycle
 
@@ -185,7 +293,8 @@
                               :in $ ?n
                               :where [?e :user/id ?n]]
                             "admin")
-           (signup datomic {:user/id "admin" :user/password "password123"} "admin"))
+           (signup datomic {:user/id "admin" :user/password "password123"} "admin")
+           (signup datomic {:user/id "guest" :user/password "password123"} "operator"))
 
          component)
 

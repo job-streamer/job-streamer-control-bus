@@ -4,7 +4,10 @@
             [clojure.java.io :as io]
             [datomic.api :as d]
             [ring.util.request :refer [content-type]]
-            [clojure.data.json :as json])
+            [ring.util.codec :refer [form-encode]]
+            [clojure.data.json :as json]
+            [clojure.string :as string]
+            [crypto.random :as random])
   (:import [org.jsoup Jsoup]))
 
 (defn to-int [n default-value]
@@ -136,3 +139,12 @@
       (catch Exception e
         (log/error e "fail to parse edn.")
         {:message (format "IOException: %s" (.getMessage e))}))))
+
+(defn format-url [{:keys [query url]}]
+  (->> (form-encode query)
+       (str url "?")))
+
+(defn generate-token
+  "Generates random string for anti-forgery-token."
+  []
+  (string/replace (random/base64 60) #"[\+=/]" "-"))

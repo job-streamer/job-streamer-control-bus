@@ -27,6 +27,12 @@
    (ANY "/users" [] (auth/list-resource auth))
    (ANY "/user" [] (auth/entry-resource auth nil))
    (ANY ["/user/:user-id" :user-id #".*"] [user-id] (auth/entry-resource auth user-id))
+   (ANY "/oauth" []
+     (auth/oauth-resource auth))
+   (ANY "/oauth/:provider-id" [provider-id]
+     (auth/redirect-to-auth-provider auth provider-id))
+   (ANY "/oauth/:provider-id/cb" [provider-id]
+     (auth/oauth-callback auth provider-id))
 
    ;; Job
    (ANY "/:app-name/jobs" [app-name]
