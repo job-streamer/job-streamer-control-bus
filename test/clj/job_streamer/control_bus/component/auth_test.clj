@@ -70,7 +70,7 @@
             {:keys [status body session headers] :as res} (handler request)]
         (are [x y] (= x y)
              401                                   status
-             {:messages ["Autification failure."]} (-> body edn/read-string)
+             {:messages ["Authentication failure."]} (-> body edn/read-string)
              nil                                   (:identity session))))
     (testing "login as created user"
       (let [request {:request-method :post
