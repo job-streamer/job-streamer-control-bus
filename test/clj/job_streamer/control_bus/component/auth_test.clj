@@ -106,7 +106,7 @@
             {:keys [status body]} (handler request)]
         (are [x y] (= x y)
              200     status
-             1       (-> body edn/read-string count)
+             2       (-> body edn/read-string count)
              "admin" (-> body edn/read-string first :user/id))))))
 
 (deftest entry-resource
@@ -188,7 +188,7 @@
             {:keys [status body]} (handler request)]
         (are [x y] (= x y)
              200     status
-             2       (-> body edn/read-string count))))
+             3       (-> body edn/read-string count))))
     (let [system (new-system config)
           handler (auth/entry-resource (:auth system) "test")]
       (testing "delete user"
@@ -207,4 +207,4 @@
               {:keys [status body]} (handler request)]
           (are [x y] (= x y)
                200     status
-               1       (-> body edn/read-string count)))))))
+               2       (-> body edn/read-string count)))))))
