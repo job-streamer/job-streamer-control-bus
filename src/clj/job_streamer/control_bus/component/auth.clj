@@ -23,8 +23,8 @@
                 '{:find [?permission]
                   :in [$ ?app-name ?user-id]
                   :where [[?member :member/user ?user]
-                          [?member :member/rolls ?roll]
-                          [?roll :roll/permissions ?permission]
+                          [?member :member/roles ?role]
+                          [?role :role/permissions ?permission]
                           [?user :user/id ?user-id]
                           [?app :application/members ?member]
                           [?app :application/name ?app-name]]}
