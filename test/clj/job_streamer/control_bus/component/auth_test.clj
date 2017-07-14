@@ -21,6 +21,7 @@
 
 (def config
   (meta-merge config/defaults
+              config/resource-file
               config/environ
               test-config))
 
@@ -70,12 +71,12 @@
             {:keys [status body session headers] :as res} (handler request)]
         (are [x y] (= x y)
              401                                   status
-             {:messages ["Autification failure."]} (-> body edn/read-string)
+             {:messages ["Authentication failure."]} (-> body edn/read-string)
              nil                                   (:identity session))))
     (testing "login as created user"
       (let [request {:request-method :post
                      :content-type "application/edn"
-                     :body (pr-str {:user/id "addeduser" :user/password "password123" :roll "watcher"})}
+                     :body (pr-str {:user/id "addeduser" :user/password "password123" :role "watcher"})}
             {:keys [status body]} (let [handler (auth/entry-resource (:auth system) nil)] (handler request))]
         (is (= 201 status)))
       (let [request {:request-method :post
@@ -105,7 +106,7 @@
             {:keys [status body]} (handler request)]
         (are [x y] (= x y)
              200     status
-             1       (-> body edn/read-string count)
+             2       (-> body edn/read-string count)
              "admin" (-> body edn/read-string first :user/id))))))
 
 (deftest entry-resource
@@ -115,7 +116,7 @@
     (testing "lacking id"
       (let [request {:request-method :post
                      :content-type "application/edn"
-                     :body (pr-str {:user/password "password123" :roll "watcher"})}
+                     :body (pr-str {:user/password "password123" :role "watcher"})}
             {:keys [status body]} (handler request)]
         (are [x y] (= x y)
              400 status
@@ -123,23 +124,23 @@
     (testing "lacking password"
       (let [request {:request-method :post
                      :content-type "application/edn"
-                     :body (pr-str {:user/id "test" :roll "watcher"})}
+                     :body (pr-str {:user/id "test" :role "watcher"})}
             {:keys [status body]} (handler request)]
         (are [x y] (= x y)
              400 status
              ["password must be present" "token must be present"] (-> body edn/read-string :messages))))
-    (testing "lacking roll"
+    (testing "lacking role"
       (let [request {:request-method :post
                      :content-type "application/edn"
                      :body (pr-str {:user/id "test" :user/password "password123"})}
             {:keys [status body]} (handler request)]
         (are [x y] (= x y)
              400 status
-             ["roll must be present"] (-> body edn/read-string :messages))))
+             ["role must be present"] (-> body edn/read-string :messages))))
     (testing "id does not satisfy min length"
       (let [request {:request-method :post
                      :content-type "application/edn"
-                     :body (pr-str {:user/id "te" :user/password "password123" :roll "watcher"})}
+                     :body (pr-str {:user/id "te" :user/password "password123" :role "watcher"})}
             {:keys [status body]} (handler request)]
         (are [x y] (= x y)
              400 status
@@ -147,7 +148,7 @@
     (testing "id does not satisfy max length"
       (let [request {:request-method :post
                      :content-type "application/edn"
-                     :body (pr-str {:user/id "test12345678901234567" :user/password "password123" :roll "watcher"})}
+                     :body (pr-str {:user/id "test12345678901234567" :user/password "password123" :role "watcher"})}
             {:keys [status body]} (handler request)]
         (are [x y] (= x y)
              400 status
@@ -155,7 +156,7 @@
     (testing "password does not satisfy min length"
       (let [request {:request-method :post
                      :content-type "application/edn"
-                     :body (pr-str {:user/id "test" :user/password "passwor" :roll "watcher"})}
+                     :body (pr-str {:user/id "test" :user/password "passwor" :role "watcher"})}
             {:keys [status body]} (handler request)]
         (are [x y] (= x y)
              400 status
@@ -163,23 +164,23 @@
     (testing "id conflicts"
       (let [request {:request-method :post
                      :content-type "application/edn"
-                     :body (pr-str {:user/id "admin" :user/password "password123" :roll "watcher"})}
+                     :body (pr-str {:user/id "admin" :user/password "password123" :role "watcher"})}
             {:keys [status body]} (handler request)]
         (are [x y] (= x y)
              400 status
              ["id is used by someone."] (-> body edn/read-string :messages))))
-    (testing "invalid roll"
+    (testing "invalid role"
       (let [request {:request-method :post
                      :content-type "application/edn"
-                     :body (pr-str {:user/id "test" :user/password "password123" :roll "nothing"})}
+                     :body (pr-str {:user/id "test" :user/password "password123" :role "nothing"})}
             {:keys [status body]} (handler request)]
         (are [x y] (= x y)
              400 status
-             ["roll is used by someone."] (-> body edn/read-string :messages))))
+             ["role is used by someone."] (-> body edn/read-string :messages))))
     (testing "create user"
       (let [request {:request-method :post
                      :content-type "application/edn"
-                     :body (pr-str {:user/id "test" :user/password "password123" :roll "watcher"})}
+                     :body (pr-str {:user/id "test" :user/password "password123" :role "watcher"})}
             {:keys [status body]} (handler request)]
         (is (= 201 status)))
       (let [handler (auth/list-resource (:auth system))
@@ -187,18 +188,18 @@
             {:keys [status body]} (handler request)]
         (are [x y] (= x y)
              200     status
-             2       (-> body edn/read-string count))))
+             3       (-> body edn/read-string count))))
     (let [system (new-system config)
           handler (auth/entry-resource (:auth system) "test")]
       (testing "delete user"
         (let [request {:request-method :post
                        :content-type "application/edn"
-                       :body (pr-str {:user/id "test" :user/password "password123" :roll "watcher"})}
+                       :body (pr-str {:user/id "test" :user/password "password123" :role "watcher"})}
               {:keys [status body]} (handler request)]
           (is (= 201 status)))
         (let [request {:request-method :delete
                        :content-type "application/edn"
-                       :body (pr-str {:user/password "password123" :roll "watcher"})}
+                       :body (pr-str {:user/password "password123" :role "watcher"})}
               {:keys [status body]} (handler request)]
           (is (== 204 status)))
         (let [handler (auth/list-resource (:auth system))
@@ -206,4 +207,4 @@
               {:keys [status body]} (handler request)]
           (are [x y] (= x y)
                200     status
-               1       (-> body edn/read-string count)))))))
+               2       (-> body edn/read-string count)))))))

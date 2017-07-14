@@ -57,7 +57,7 @@
             (header "Access-Control-Allow-Origin" access-control-allow-origin)
             (header "Access-Control-Allow-Credentials" "true"))))))
 
-(def access-rules [{:pattern #"^/(?!auth|user|healthcheck|version).*$"
+(def access-rules [{:pattern #"^/(?!auth|oauth|user|healthcheck|version).*$"
                     :handler authenticated?}])
 
 (defn token-base [token-provider]
