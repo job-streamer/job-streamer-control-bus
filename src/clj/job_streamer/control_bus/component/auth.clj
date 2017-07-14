@@ -48,6 +48,7 @@
                                        [?app :application/members ?member]
                                        [?app :application/name ?app-name]]}
                              user-id password app-name)]
+
       (let [permissions (find-permissions datomic user-id app-name)]
         (assoc user :permissions permissions)))))
 
@@ -73,16 +74,16 @@
                    :where [[?u :user/id ?id]]}
                  id)))
 
-(defvalidator exist-roll-validator
+(defvalidator exist-role-validator
   {:default-message-format "%s is used by someone."}
-  [roll-name datomic]
+  [role-name datomic]
   (d/query datomic
            '[:find ?e .
              :in $ ?n
-             :where [?e :roll/name ?n]]
-           roll-name))
+             :where [?e :role/name ?n]]
+           role-name))
 
-(defn- signup [datomic user roll-name]
+(defn- signup [datomic user role-name]
   (when-let [user (let [salt (nonce/random-nonce 16)
                         password (some-> (not-empty (:user/password user))
                                          (.getBytes)
@@ -98,11 +99,11 @@
                                 :user/salt salt})
                              (when-let [token (:user/token user)]
                                {:user/token token}))))]
-    (let [roll-id (d/query datomic
+    (let [role-id (d/query datomic
                            '[:find ?e .
                              :in $ ?n
-                             :where [?e :roll/name ?n]]
-                           roll-name)
+                             :where [?e :role/name ?n]]
+                           role-name)
           member-id (d/tempid :db.part/user)
           app (d/query datomic
                        '[:find (pull ?e [*]) .
@@ -112,9 +113,9 @@
       (let [result (d/transact datomic [user
                                         {:db/id member-id
                                          :member/user (select-keys user [:db/id])
-                                         :member/rolls [roll-id]}
+                                         :member/roles [role-id]}
                                         (update-in (select-keys app [:db/id :application/members]) [:application/members] #(conj % member-id))])]
-        (log/infof "Signup %s as %s succeeded." (:user/id user) roll-name)
+        (log/infof "Signup %s as %s succeeded." (:user/id user) role-name)
         result))))
 
 (defn fetch-access-token [{:keys [oauth-providers control-bus-url]} provider-id state code]
@@ -163,7 +164,7 @@
                             (ring-response {:session {:identity (select-keys user [:user/id :permissions])}
                                             :body (pr-str {:token (str access-token)})}))
                           (do (log/info "Login attempt failed because of authentification failure.")
-                            (ring-response {:status 401 :body (pr-str {:messages ["Autification failure."]})})))))
+                            (ring-response {:status 401 :body (pr-str {:messages ["Authentication failure."]})})))))
     :handle-no-content (fn [_] (ring-response {:session {}}))))
 
 (defn list-resource
@@ -191,13 +192,13 @@
                                             [v/min-count 3 :message "Username must be at least 3 characters long."]
                                             [v/max-count 20 :message "Username is too long."]
                                             [unique-name-validator datomic]]
-                            :roll          [[v/required]
+                            :role          [[v/required]
                                             [v/matches #"^[\w\-]+$"]
-                                            [exist-roll-validator datomic]]))
+                                            [exist-role-validator datomic]]))
     :post! (fn [{user :edn}]
-             (let [roll-name (:roll user)
+             (let [role-name (:role user)
                    user (select-keys user [:user/id :user/password])]
-               (signup datomic user roll-name)))
+               (signup datomic user role-name)))
     :delete! (fn [_]
                (d/transact datomic
                            [[:db.fn/retractEntity [:user/id user-id]]]))))
@@ -255,26 +256,26 @@
 
   (start [component]
 
-         ;; Create an initil user and rolls.
+         ;; Create an initil user and roles.
          (->> [{:db/id (d/tempid :db.part/user)
-                :roll/name "admin"
-                :roll/permissions [:permission/read-job
+                :role/name "admin"
+                :role/permissions [:permission/read-job
                                    :permission/create-job
                                    :permission/update-job
                                    :permission/delete-job
                                    :permission/execute-job]}
                {:db/id (d/tempid :db.part/user)
-                :roll/name "operator"
-                :roll/permissions [:permission/read-job
+                :role/name "operator"
+                :role/permissions [:permission/read-job
                                    :permission/execute-job]}
                {:db/id (d/tempid :db.part/user)
-                :roll/name "watcher"
-                :roll/permissions [:permission/read-job]}]
+                :role/name "watcher"
+                :role/permissions [:permission/read-job]}]
               (filter #(nil? (d/query datomic
                                       '[:find ?e .
                                         :in $ ?n
-                                        :where [?e :roll/name ?n]]
-                                      (:roll/name %))))
+                                        :where [?e :role/name ?n]]
+                                      (:role/name %))))
               (d/transact datomic))
          (when-not (d/query datomic
                             '[:find ?e .

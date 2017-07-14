@@ -85,14 +85,14 @@
    (schema member
            (fields
              [user :ref]
-             [rolls :ref :many]))
+             [roles :ref :many]))
    (schema user
            (fields
              [id :string :indexed :unique-value]
              [password :string]
              [salt :bytes]
              [token :string]))
-   (schema roll
+   (schema role
            (fields
              [name :string :indexed :unique-value]
              [permissions :keyword :many]))])
