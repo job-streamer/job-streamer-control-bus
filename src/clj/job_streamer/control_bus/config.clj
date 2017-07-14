@@ -1,5 +1,7 @@
 (ns job-streamer.control-bus.config
   (:require [environ.core :refer [env]]
+            [clojure.java.io :as io]
+            [clojure.edn :as edn]
             [job-streamer.control-bus.model :as model]))
 
 (def defaults
@@ -24,3 +26,8 @@
    :auth {:access-control-allow-origin access-control-allow-origin}
    :datomic {:uri datomic-uri}}))
 
+(def resource-file
+  (some-> "job-streamer-control-bus/config.edn"
+          io/resource
+          slurp
+          edn/read-string))
