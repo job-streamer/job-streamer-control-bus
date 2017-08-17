@@ -255,6 +255,7 @@
   component/Lifecycle
 
   (start [component]
+<<<<<<< HEAD
 
          ;; Create an initil user and roles.
          (->> [{:db/id (d/tempid :db.part/user)
@@ -285,6 +286,8 @@
            (signup datomic {:user/id "admin" :user/password "password123"} "admin")
            (signup datomic {:user/id "guest" :user/password "password123"} "operator"))
 
+=======
+>>>>>>> f32b045... Add first schema migration
          component)
 
   (stop [component]
