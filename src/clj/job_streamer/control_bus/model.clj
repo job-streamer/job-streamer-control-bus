@@ -1,7 +1,7 @@
 (ns job-streamer.control-bus.model
   (:require [datomic-schema.schema :refer [fields part schema]]))
 
-(def dbschema
+(def first-schema
   [(schema application
            (fields
             [name :string :indexed :unique-value :fulltext]
@@ -95,7 +95,12 @@
    (schema role
            (fields
              [name :string :indexed :unique-value]
-             [permissions :keyword :many]))
-   (schema schema
+             [permissions :keyword :many]))])
+
+(def second-schema
+  [(schema schema
            (fields
              [version :long]))])
+
+(def dbschemas
+  [first-schema second-schema])

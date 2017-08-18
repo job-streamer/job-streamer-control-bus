@@ -10,7 +10,7 @@
    :discoverer {:ws-port 45102}
    :scheduler  {:host "localhost"
                 :port 45102}
-   :migration {:dbschema model/dbschema}
+   :migration {:dbschemas model/dbschemas}
    :auth {:access-control-allow-origin "http://localhost:3000"}
    :datomic {:uri "datomic:free://localhost:4334/job-streamer"}})
 

@@ -14,7 +14,7 @@
 (defn- dbparts []
   [(part "job")])
 
-(defn- first-migration [datomic dbschema]
+(defn- first-migration [datomic dbschemas]
   (log/info "Start first-migration.")
   (let [schema (concat
                   ;(s/generate-parts (dbparts))
@@ -24,48 +24,69 @@
                                                   :unknown]]
                                   [:log-level [:trace :debug :info :warn :error]]
                                   [:action [:abandon :stop :alert]])
-                  (s/generate-schema dbschema))
-        has-schema? (some? (d/query datomic
-                                    '[:find ?s .
-                                      :in $
-                                      :where [?s :db/ident :application/name]]))]
-        (d/transact datomic schema)
-        (d/transact datomic [{:db/id (d/tempid :db.part/user) :schema/version 1}])
-        (when-not has-schema?
-          (log/info "Create an initial app, user and rolls.")
-          (d/transact datomic [{:db/id (d/tempid :db.part/user)
-                                :application/name "default"
-                                :application/description "default application"
-                                :application/classpaths []
-                                :application/members []}
-                               {:db/id (d/tempid :db.part/user)
-                                :roll/name "admin"
-                                :roll/permissions [:permission/read-job
-                                                   :permission/create-job
-                                                   :permission/update-job
-                                                   :permission/delete-job
-                                                   :permission/execute-job]}
-                               {:db/id (d/tempid :db.part/user)
-                                :roll/name "operator"
-                                :roll/permissions [:permission/read-job
-                                                   :permission/execute-job]}
-                               {:db/id (d/tempid :db.part/user)
-                                :roll/name "watcher"
-                                :roll/permissions [:permission/read-job]}])
-          (signup datomic {:user/id "admin" :user/password "password123"} "admin"))
-      (log/info "Succeeded first-migration.")))
+                  (s/generate-schema (apply concat dbschemas)))]
+    (d/transact datomic schema)
+    (log/info "Create an initial app, user and roles.")
+    (d/transact datomic [{:db/id (d/tempid :db.part/user)
+                          :application/name "default"
+                          :application/description "default application"
+                          :application/classpaths []
+                          :application/members []}
+                         {:db/id (d/tempid :db.part/user)
+                          :role/name "admin"
+                          :role/permissions [:permission/read-job
+                                             :permission/create-job
+                                             :permission/update-job
+                                             :permission/delete-job
+                                             :permission/execute-job]}
+                         {:db/id (d/tempid :db.part/user)
+                          :role/name "operator"
+                          :role/permissions [:permission/read-job
+                                             :permission/execute-job]}
+                         {:db/id (d/tempid :db.part/user)
+                          :role/name "watcher"
+                          :role/permissions [:permission/read-job]}
+                         {:db/id (d/tempid :db.part/user) :schema/version 2}])
+    (signup datomic {:user/id "admin" :user/password "password123"} "admin")
+    (signup datomic {:user/id "guest" :user/password "password123"} "operator")
+    (log/info "Succeeded first-migration.")))
 
-(defrecord Migration [datomic dbschema]
+(defn- second-migration [datomic dbschemas]
+  (log/info "Start second-migration.")
+  (let [schema (s/generate-schema (second dbschemas))
+        alteration [{:db/id :roll/name
+                     :db/ident :role/name}
+                    {:db/id :roll/permissions
+                     :db/ident :role/permissions}
+                    {:db/id :member/rolls
+                     :db/ident :member/roles}]
+        version [{:db/id (d/tempid :db.part/user) :schema/version 2}]]
+    (d/transact datomic (concat schema alteration version))
+    (log/info "Succeeded second-migration.")))
+
+(defrecord Migration [datomic dbschemas]
   component/Lifecycle
 
   (start [component]
     ;; Confirm schema is set
-    (when (nil? (d/query datomic
-                         '[:find ?s .
-                           :in $
-                           :where [?s :db/ident :schema/version]]))
-      (first-migration datomic dbschema))
-      component)
+    (let [has-schema? (some? (d/query datomic
+                            '[:find ?s .
+                              :in $
+                              :where [?s :db/ident :application/name]]))
+          has-version? (some? (d/query datomic
+                            '[:find ?s .
+                              :in $
+                              :where [?s :db/ident :schema/version]]))]
+      (if-not has-schema?
+        (first-migration datomic dbschemas)
+        (when-not has-version?
+          (second-migration datomic dbschemas))))
+    (let [version (d/query datomic
+                           '[:find ?v .
+                             :in $
+                             :where [?s :schema/version ?v]])]
+      (log/info "schema version" version))
+    component)
 
   (stop [component]
     component))
