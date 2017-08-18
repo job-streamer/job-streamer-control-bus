@@ -61,7 +61,8 @@
                     {:db/id :member/rolls
                      :db/ident :member/roles}]
         version [{:db/id (d/tempid :db.part/user) :schema/version 2}]]
-    (d/transact datomic (concat schema alteration version))
+    (d/transact datomic (concat schema alteration))
+    (d/transact datomic version)
     (log/info "Succeeded second-migration.")))
 
 (defrecord Migration [datomic dbschemas]
