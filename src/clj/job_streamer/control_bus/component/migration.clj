@@ -24,32 +24,35 @@
                                                   :unknown]]
                                   [:log-level [:trace :debug :info :warn :error]]
                                   [:action [:abandon :stop :alert]])
-                  (s/generate-schema dbschema))]
+                  (s/generate-schema dbschema))
+        has-schema? (some? (d/query datomic
+                                    '[:find ?s .
+                                      :in $
+                                      :where [?s :db/ident :application/name]]))]
         (d/transact datomic schema)
-
-        ;; Create an initial app, user and rolls.
-        (d/transact datomic [{:db/id (d/tempid :db.part/user)
-                              :application/name "default"
-                              :application/description "default application"
-                              :application/classpaths []
-                              :application/members []}
-                             {:db/id (d/tempid :db.part/user)
-                              :roll/name "admin"
-                              :roll/permissions [:permission/read-job
-                                                 :permission/create-job
-                                                 :permission/update-job
-                                                 :permission/delete-job
-                                                 :permission/execute-job]}
-                             {:db/id (d/tempid :db.part/user)
-                              :roll/name "operator"
-                              :roll/permissions [:permission/read-job
-                                                 :permission/execute-job]}
-                             {:db/id (d/tempid :db.part/user)
-                              :roll/name "watcher"
-                              :roll/permissions [:permission/read-job]}
-                             {:db/id (d/tempid :db.part/user) :schema/version 1}])
-
-        (signup datomic {:user/id "admin" :user/password "password123"} "admin")
+        (d/transact datomic [{:db/id (d/tempid :db.part/user) :schema/version 1}])
+        (when-not has-schema?
+          (log/info "Create an initial app, user and rolls.")
+          (d/transact datomic [{:db/id (d/tempid :db.part/user)
+                                :application/name "default"
+                                :application/description "default application"
+                                :application/classpaths []
+                                :application/members []}
+                               {:db/id (d/tempid :db.part/user)
+                                :roll/name "admin"
+                                :roll/permissions [:permission/read-job
+                                                   :permission/create-job
+                                                   :permission/update-job
+                                                   :permission/delete-job
+                                                   :permission/execute-job]}
+                               {:db/id (d/tempid :db.part/user)
+                                :roll/name "operator"
+                                :roll/permissions [:permission/read-job
+                                                   :permission/execute-job]}
+                               {:db/id (d/tempid :db.part/user)
+                                :roll/name "watcher"
+                                :roll/permissions [:permission/read-job]}])
+          (signup datomic {:user/id "admin" :user/password "password123"} "admin"))
       (log/info "Succeeded first-migration.")))
 
 (defrecord Migration [datomic dbschema]
@@ -60,7 +63,7 @@
     (when (nil? (d/query datomic
                          '[:find ?s .
                            :in $
-                           :where [?s :db/ident :application/name]]))
+                           :where [?s :db/ident :schema/version]]))
       (first-migration datomic dbschema))
       component)
 
