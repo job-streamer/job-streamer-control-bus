@@ -61,7 +61,8 @@ public class BpmnStructureVisitor implements NodeVisitor {
     }
 
     private void parseTransition(Element bpmnEl, Element jobEl) {
-        for (Element outgoing : bpmnEl.select("bpmn|outgoing")) {
+        Elements outgoings = getChildrenByTag(bpmnEl.children(), "bpmn:outgoing");
+        for (Element outgoing : outgoings) {
             Element transition = transitions.get(outgoing.text().trim());
             String on = transition.hasAttr("on") ? transition.attr("on") : "*";
             String targetRef = transition.attr("targetRef");
@@ -95,6 +96,16 @@ public class BpmnStructureVisitor implements NodeVisitor {
         }
     }
 
+    private Elements getChildrenByTag(Elements children, String tagName) {
+        Elements result = new Elements();
+        for(Element child : children) {
+            if(child.tagName().equals(tagName)) {
+                result.add(child);
+            }
+        }
+        return  result;
+    }
+
     private void copyAttribute(Element el, Element bpmnEl, String attrName) {
         copyAttribute(el, bpmnEl, attrName, null);
     }
@@ -116,6 +127,7 @@ public class BpmnStructureVisitor implements NodeVisitor {
                 el.attr("id", or(
                         node.attr("name"), node.attr("bpmn:name"), node.attr("id")));
                 parseProperties((Element) node, el);
+                parseListeners((Element) node, el);
                 current.appendChild(el);
                 current = el;
                 break;
@@ -149,6 +161,7 @@ public class BpmnStructureVisitor implements NodeVisitor {
                                 node.attr("name"),
                                 node.attr("id")
                         ));
+                parseTransition((Element) node, el);
                 current.appendChild(el);
                 current = el;
                 break;
