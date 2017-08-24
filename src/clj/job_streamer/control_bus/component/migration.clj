@@ -14,8 +14,8 @@
 (defn- dbparts []
   [(part "job")])
 
-(defn- first-migration [datomic dbschemas]
-  (log/info "Start first-migration.")
+(defn- migration-v1 [datomic dbschemas]
+  (log/info "Start migration-v1.")
   (let [schema (concat
                   ;(s/generate-parts (dbparts))
                   (generate-enums [:batch-status [:undispatched :unrestarted :queued
@@ -49,10 +49,10 @@
                          {:db/id (d/tempid :db.part/user) :schema/version 2}])
     (signup datomic {:user/id "admin" :user/password "password123"} "admin")
     (signup datomic {:user/id "guest" :user/password "password123"} "operator")
-    (log/info "Succeeded first-migration.")))
+    (log/info "Succeeded migration-v1.")))
 
-(defn- second-migration [datomic dbschemas]
-  (log/info "Start second-migration.")
+(defn- migration-v2 [datomic dbschemas]
+  (log/info "Start migration-v2.")
   (let [schema (s/generate-schema (second dbschemas))
         alteration [{:db/id :roll/name
                      :db/ident :role/name}
@@ -63,7 +63,7 @@
         version [{:db/id (d/tempid :db.part/user) :schema/version 2}]]
     (d/transact datomic (concat schema alteration))
     (d/transact datomic version)
-    (log/info "Succeeded second-migration.")))
+    (log/info "Succeeded migration-v2.")))
 
 (defrecord Migration [datomic dbschemas]
   component/Lifecycle
@@ -79,9 +79,9 @@
                               :in $
                               :where [?s :db/ident :schema/version]]))]
       (if-not has-schema?
-        (first-migration datomic dbschemas)
+        (migration-v1 datomic dbschemas)
         (when-not has-version?
-          (second-migration datomic dbschemas))))
+          (migration-v2 datomic dbschemas))))
     (let [version (d/query datomic
                            '[:find ?v .
                              :in $
