@@ -21,6 +21,7 @@
                  [compojure "1.5.1"]
                  [ring/ring-defaults "0.2.1" :exclusions [javax.servlet/servlet-api]]
                  [ring "1.5.0" :exclusions [ring/ring-jetty-adapter]]
+                 [ring/ring-session-timeout "0.2.0"]
                  [http-kit "2.1.19"]
                  [ch.qos.logback/logback-classic "1.1.7"]
                  [org.jboss.weld.se/weld-se "2.2.7.Final"]
