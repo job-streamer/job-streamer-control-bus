@@ -1,8 +1,10 @@
 (ns job-streamer.control-bus.component.migration
   (:require [com.stuartsierra.component :as component]
+            [clojure.tools.logging :as log]
             [datomic.api :refer [part]]
             [datomic-schema.schema :as s]
-            (job-streamer.control-bus.component [datomic :as d])))
+            (job-streamer.control-bus.component [datomic :as d]
+                                                [auth :refer [signup]])))
 
 (defn- generate-enums [& enums]
   (apply concat
@@ -12,11 +14,9 @@
 (defn- dbparts []
   [(part "job")])
 
-(defrecord Migration [datomic dbschema]
-  component/Lifecycle
-
-  (start [component]
-    (let [schema (concat
+(defn- migration-v1 [datomic dbschemas]
+  (log/info "Start migration-v1.")
+  (let [schema (concat
                   ;(s/generate-parts (dbparts))
                   (generate-enums [:batch-status [:undispatched :unrestarted :queued
                                                   :abandoned :completed :failed
@@ -24,9 +24,70 @@
                                                   :unknown]]
                                   [:log-level [:trace :debug :info :warn :error]]
                                   [:action [:abandon :stop :alert]])
-                  (s/generate-schema dbschema))]
-      (d/transact datomic schema)
-      component))
+                  (s/generate-schema (apply concat dbschemas)))]
+    (d/transact datomic schema)
+    (log/info "Create an initial app, user and roles.")
+    (d/transact datomic [{:db/id (d/tempid :db.part/user)
+                          :application/name "default"
+                          :application/description "default application"
+                          :application/classpaths []
+                          :application/members []}
+                         {:db/id (d/tempid :db.part/user)
+                          :role/name "admin"
+                          :role/permissions [:permission/read-job
+                                             :permission/create-job
+                                             :permission/update-job
+                                             :permission/delete-job
+                                             :permission/execute-job]}
+                         {:db/id (d/tempid :db.part/user)
+                          :role/name "operator"
+                          :role/permissions [:permission/read-job
+                                             :permission/execute-job]}
+                         {:db/id (d/tempid :db.part/user)
+                          :role/name "watcher"
+                          :role/permissions [:permission/read-job]}
+                         {:db/id (d/tempid :db.part/user) :schema/version 2}])
+    (signup datomic {:user/id "admin" :user/password "password123"} "admin")
+    (signup datomic {:user/id "guest" :user/password "password123"} "operator")
+    (log/info "Succeeded migration-v1.")))
+
+(defn- migration-v2 [datomic dbschemas]
+  (log/info "Start migration-v2.")
+  (let [schema (s/generate-schema (second dbschemas))
+        alteration [{:db/id :roll/name
+                     :db/ident :role/name}
+                    {:db/id :roll/permissions
+                     :db/ident :role/permissions}
+                    {:db/id :member/rolls
+                     :db/ident :member/roles}]
+        version [{:db/id (d/tempid :db.part/user) :schema/version 2}]]
+    (d/transact datomic (concat schema alteration))
+    (d/transact datomic version)
+    (log/info "Succeeded migration-v2.")))
+
+(defrecord Migration [datomic dbschemas]
+  component/Lifecycle
+
+  (start [component]
+    ;; Confirm schema is set
+    (let [has-schema? (some? (d/query datomic
+                            '[:find ?s .
+                              :in $
+                              :where [?s :db/ident :application/name]]))
+          has-version? (some? (d/query datomic
+                            '[:find ?s .
+                              :in $
+                              :where [?s :db/ident :schema/version]]))]
+      (if-not has-schema?
+        (migration-v1 datomic dbschemas)
+        (when-not has-version?
+          (migration-v2 datomic dbschemas))))
+    (let [version (d/query datomic
+                           '[:find ?v .
+                             :in $
+                             :where [?s :schema/version ?v]])]
+      (log/info "schema version" version))
+    component)
 
   (stop [component]
     component))

@@ -32,7 +32,7 @@
        :calendar    (calendar/calendar-component (:calendar config))
        :scheduler (scheduler/scheduler-component (:scheduler config))
        :datomic (datomic-component   (:datomic config))
-       :migration (migration-component {:dbschema model/dbschema}))
+       :migration (migration-component {:dbschemas model/dbschemas}))
       (component/system-using
        {:calendar [:datomic :migration :scheduler]
         :scheduler [:datomic]

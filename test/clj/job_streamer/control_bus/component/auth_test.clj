@@ -31,7 +31,7 @@
         :auth    (auth/auth-component (:auth config))
         :token   (token/token-provider-component (:token config))
         :datomic (datomic-component   (:datomic config))
-        :migration (migration-component {:dbschema model/dbschema}))
+        :migration (migration-component {:dbschemas model/dbschemas}))
       (component/system-using
         {:auth [:token :datomic :migration :apps]
          :apps [:datomic :migration]
