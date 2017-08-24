@@ -36,13 +36,13 @@
     :handle-created (fn [ctx]
                       (::post-response ctx))))
 
-(defrecord TokenProvider [disposable?]
+(defrecord TokenProvider [disposable? session-timeout]
   component/Lifecycle
 
   (start [component]
          (if (:token-cache component)
            component
-           (let [token-cache (atom (cache/ttl-cache-factory {} :ttl (* 30 60 1000)))]
+           (let [token-cache (atom (cache/ttl-cache-factory {} :ttl (* session-timeout 1000)))]
              (assoc component :token-cache token-cache))))
 
   (stop [component]
