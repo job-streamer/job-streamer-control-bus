@@ -11,7 +11,7 @@
    :discoverer {:ws-port 45102}
    :scheduler  {:host "localhost"
                 :port 45102}
-   :migration {:dbschema model/dbschema}
+   :migration {:dbschemas model/dbschemas}
    :token {:session-timeout (* 30 60)}
    :auth {:access-control-allow-origin "http://localhost:3000"}
    :datomic {:uri "datomic:mem://job-streamer"}})
