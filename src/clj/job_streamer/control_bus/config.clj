@@ -14,7 +14,7 @@
    :migration {:dbschemas model/dbschemas}
    :token {:session-timeout (* 30 60)}
    :auth {:access-control-allow-origin "http://localhost:3000"}
-   :datomic {:uri "datomic:mem://job-streamer"}})
+   :datomic {:uri "datomic:free://localhost:4334/job-streamer"}})
 
 (def environ
   (let [port (some-> env :control-bus-port Integer.)
