@@ -65,6 +65,44 @@
     (d/transact datomic version)
     (log/info "Succeeded migration-v2.")))
 
+(defn- find-role-id [datomic name]
+  (d/query datomic
+           '{:find [?r .]
+             :in [$ ?n]
+             :where [[?r :role/name ?n]]}
+           name))
+
+(defn- find-schema-id [datomic]
+  (d/query datomic
+           '{:find [?s .]
+             :in [$]
+             :where [[?s :schema/version]]}))
+
+(defn- find-schema-version [datomic]
+  (d/query datomic
+           '{:find [?v .]
+             :in [$]
+             :where [[?s :schema/version ?v]]}))
+
+(defn- migration-v3 [datomic]
+  (log/info "Start migration-v3.")
+  (d/transact datomic [{:db/id (find-role-id datomic "admin")
+                        :role/permissions [:permission/read-calendar
+                                           :permission/create-calendar
+                                           :permission/update-calendar
+                                           :permission/delete-calendar
+                                           :permission/attach-calendar]}
+                       {:db/id (find-role-id datomic "operator")
+                        :role/permissions [:permission/read-calendar
+                                           :permission/create-calendar
+                                           :permission/update-calendar
+                                           :permission/delete-calendar
+                                           :permission/attach-calendar]}
+                       {:db/id (find-role-id datomic "watcher")
+                        :role/permissions [:permission/read-calendar]}
+                       {:db/id (find-schema-id datomic) :schema/version 3}])
+  (log/info "Succeeded migration-v3."))
+
 (defrecord Migration [datomic dbschemas]
   component/Lifecycle
 
@@ -82,11 +120,11 @@
         (migration-v1 datomic dbschemas)
         (when-not has-version?
           (migration-v2 datomic dbschemas))))
-    (let [version (d/query datomic
-                           '[:find ?v .
-                             :in $
-                             :where [?s :schema/version ?v]])]
-      (log/info "schema version" version))
+
+    (when (= 2 (find-schema-version datomic))
+      (migration-v3 datomic))
+
+    (log/info "schema version" (find-schema-version datomic))
     component)
 
   (stop [component]
