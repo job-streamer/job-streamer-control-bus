@@ -90,14 +90,12 @@
                         :role/permissions [:permission/read-calendar
                                            :permission/create-calendar
                                            :permission/update-calendar
-                                           :permission/delete-calendar
-                                           :permission/attach-calendar]}
+                                           :permission/delete-calendar]}
                        {:db/id (find-role-id datomic "operator")
                         :role/permissions [:permission/read-calendar
                                            :permission/create-calendar
                                            :permission/update-calendar
-                                           :permission/delete-calendar
-                                           :permission/attach-calendar]}
+                                           :permission/delete-calendar]}
                        {:db/id (find-role-id datomic "watcher")
                         :role/permissions [:permission/read-calendar]}
                        {:db/id (find-schema-id datomic) :schema/version 3}])
