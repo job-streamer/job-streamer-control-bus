@@ -27,7 +27,7 @@
   (-> (component/system-map
         :apps    (apps/apps-component (:apps config))
         :datomic (datomic-component   (:datomic config))
-        :migration (migration-component {:dbschema model/dbschema}))
+        :migration (migration-component {:dbschemas model/dbschemas}))
       (component/system-using
         {:apps [:datomic]
          :migration [:datomic]})

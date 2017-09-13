@@ -731,6 +731,16 @@
                                   (when-let [action (get-in time-monitor [:time-monitor/action :db/ident])]
                                     (assoc time-monitor :time-monitor/action action)))))))))
 
+(defn convert-xml-resource [_]
+  (liberator/resource
+    :available-media-types ["application/edn" "application/json"]
+    :allowed-methods [:post]
+    :malformed? (fn [ctx]
+                  (parse-body ctx))
+    :handle-created (fn [{job-bpmn-xml :edn}]
+                      (let [job-xml (make-job (:job-bpmn-xml job-bpmn-xml))]
+                        {:job-xml (str job-xml)}))))
+
 (defn- execute-job [{:keys [datomic scheduler] :as jobs} app-name job-name ctx]
   (log/debug "execute job " job-name)
   (when-let [[app-id job-id] (find-by-name jobs app-name job-name)]

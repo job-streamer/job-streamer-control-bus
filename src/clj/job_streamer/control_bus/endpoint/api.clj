@@ -58,6 +58,8 @@
    (ANY ["/test-execution/:id" :id #"\d+"]
         [id]
         (jobs/test-execution-resource jobs (Long/parseLong id)))
+   (ANY "/jobs/convert-xml" []
+     (jobs/convert-xml-resource jobs))
 
    ;; Scheduler
    (ANY ["/:app-name/job/:job-name/schedule" :app-name #".*" :job-name #".*"]

@@ -196,17 +196,6 @@
   component/Lifecycle
 
   (start [component]
-    (when-not (d/query datomic
-                       '[:find ?e .
-                         :in $ ?n
-                         :where [?e :application/name ?n]]
-                       "default")
-      (d/transact datomic
-                  [{:db/id #db/id[db.part/user -1]
-                    :application/name "default"
-                    :application/description "default application"
-                    :application/classpaths []
-                    :application/members []}]))
     (let [applications (atom {})
           apps (d/query (:datomic component)
                         '{:find [[(pull ?app [*])]]

@@ -6,6 +6,7 @@
             [meta-merge.core :refer [meta-merge]]
             [ring.middleware.multipart-params :refer [wrap-multipart-params]]
             [ring.middleware.defaults :refer [wrap-defaults api-defaults]]
+            [ring.middleware.session-timeout :refer [wrap-idle-session-timeout]]
             [ring.util.response :refer [header]]
             (job-streamer.control-bus.component
              [undertow   :refer [undertow-server]]
@@ -82,6 +83,7 @@
                       [wrap-same-origin-policy :same-origin]
                       [wrap-multipart-params]
                       [wrap-internal-server-error :same-origin]
+                      [wrap-idle-session-timeout :session-timeout]
                       [wrap-defaults :defaults]]
          :access-rules {:rules access-rules :policy :allow}
          :session-base (session-backend)
@@ -90,7 +92,8 @@
                             (http/response "Permission denied" 403)
                             (http/response "Unauthorized" 401)))
          :not-found  "Resource Not Found"
-         :defaults  (meta-merge api-defaults {:session true})}})
+         :defaults  (meta-merge api-defaults {:session true})
+         :session-timeout {:timeout-response {:status 401 :session {}}}}})
 
 
 (defn new-system [config]

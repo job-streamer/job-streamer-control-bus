@@ -83,7 +83,7 @@
              :where [?e :role/name ?n]]
            role-name))
 
-(defn- signup [datomic user role-name]
+(defn signup [datomic user role-name]
   (when-let [user (let [salt (nonce/random-nonce 16)
                         password (some-> (not-empty (:user/password user))
                                          (.getBytes)
@@ -255,36 +255,6 @@
   component/Lifecycle
 
   (start [component]
-
-         ;; Create an initil user and roles.
-         (->> [{:db/id (d/tempid :db.part/user)
-                :role/name "admin"
-                :role/permissions [:permission/read-job
-                                   :permission/create-job
-                                   :permission/update-job
-                                   :permission/delete-job
-                                   :permission/execute-job]}
-               {:db/id (d/tempid :db.part/user)
-                :role/name "operator"
-                :role/permissions [:permission/read-job
-                                   :permission/execute-job]}
-               {:db/id (d/tempid :db.part/user)
-                :role/name "watcher"
-                :role/permissions [:permission/read-job]}]
-              (filter #(nil? (d/query datomic
-                                      '[:find ?e .
-                                        :in $ ?n
-                                        :where [?e :role/name ?n]]
-                                      (:role/name %))))
-              (d/transact datomic))
-         (when-not (d/query datomic
-                            '[:find ?e .
-                              :in $ ?n
-                              :where [?e :user/id ?n]]
-                            "admin")
-           (signup datomic {:user/id "admin" :user/password "password123"} "admin")
-           (signup datomic {:user/id "guest" :user/password "password123"} "operator"))
-
          component)
 
   (stop [component]
