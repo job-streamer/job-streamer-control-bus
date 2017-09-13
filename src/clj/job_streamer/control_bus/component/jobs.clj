@@ -412,13 +412,22 @@
                   (map #(d/resolve-tempid datomic tempids %))
                   vec)}))
 
+(defn estimate-execution-time [executions]
+  (if-let [latest-execution (->> executions
+                                 (filter #(and (:job-execution/start-time %) (:job-execution/end-time %)))
+                                 find-latest-execution)]
+    (- (-> latest-execution :job-execution/end-time c/from-date c/to-long)
+       (-> latest-execution :job-execution/start-time c/from-date c/to-long))
+    (* 5 60 1000)))
+
 (defn- append-schedule [scheduler job-id executions schedule]
   (if (:schedule/active? schedule)
-    (let [schedules (scheduler/fire-times scheduler job-id)]
+    (let [schedules (scheduler/fire-times scheduler job-id)
+          estimation (estimate-execution-time executions)]
       (apply conj executions
              (map (fn [sch]
                     {:job-execution/start-time sch
-                     :job-execution/end-time (Date. (+ (.getTime sch) (* 5 60 1000)))
+                     :job-execution/end-time (Date. (+ (.getTime sch) estimation))
                      :job-execution/batch-status {:db/ident :batch-status/registered}}) schedules)))
     executions))
 
