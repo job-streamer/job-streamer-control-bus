@@ -83,6 +83,13 @@
                   {:cal-id id})
                 true))
 
+   :allowed? (fn [{{:keys [request-method identity]} :request}]
+               (let [permissions (:permissions identity)]
+                 (condp = request-method
+                   :get (:permission/read-calendar permissions)
+                   :post (:permission/create-calendar permissions)
+                   false)))
+
    :post! (fn [{cal :edn :as ctx}]
             (d/transact datomic
                         [{:db/id (or (:cal-id ctx) (d/tempid :db.part/user))
@@ -129,6 +136,14 @@
                      '{:find [(pull ?e [:*]) .]
                        :in [$ ?n]
                        :where [[?e :calendar/name ?n]]} name)
+
+   :allowed? (fn [{{:keys [request-method identity]} :request}]
+               (let [permissions (:permissions identity)]
+                 (condp = request-method
+                   :get (:permission/read-calendar permissions)
+                   :put (:permission/update-calendar permissions)
+                   :delete (:permission/delete-calendar permissions)
+                   false)))
 
    :put! (fn [{cal :edn}]
            (d/transact datomic
