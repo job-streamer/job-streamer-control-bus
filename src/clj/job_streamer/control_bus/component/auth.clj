@@ -167,6 +167,29 @@
                             (ring-response {:status 401 :body (pr-str {:messages ["Authentication failure."]})})))))
     :handle-no-content (fn [_] (ring-response {:session {}}))))
 
+(defn account-resource [{:keys [datomic]}]
+  (liberator/resource
+  :available-media-types ["application/edn" "application/json"]
+  :allowed-methods [:get]
+  :exists? (fn [{{:keys [identity]} :request}]
+             (when identity
+               (let [app-name "default"
+                     id (:user/id identity)
+                     roles (d/query datomic
+                                    '{:find [[?rname ...]]
+                                      :in [$ ?appname ?uid]
+                                      :where [[?u :user/id ?uid]
+                                              [?m :member/user ?u]
+                                              [?m :member/roles ?r]
+                                              [?r :role/name ?rname]
+                                              [?app :application/name ?appname]
+                                              [?app :application/members ?m]]}
+                                    app-name id)]
+                 {::account {:user/id id :applications [{:application/name app-name :roles roles}]}})))
+
+  :handle-ok (fn [{account ::account}]
+               account)))
+
 (defn list-resource
   [{:keys [datomic] :as component}]
   (liberator/resource
