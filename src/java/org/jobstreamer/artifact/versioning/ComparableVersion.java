@@ -1,4 +1,4 @@
-package org.apache.maven.artifact.versioning;
+package org.jobstreamer.artifact.versioning;
 
 /*
  * Licensed to the Apache Software Foundation (ASF) under one

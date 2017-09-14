@@ -12,7 +12,7 @@
                                                 [agents :as ag]))
   (:import [java.net URL]
            [net.unit8.wscl ClassLoaderHolder]
-           [org.apache.maven.artifact.versioning ComparableVersion]
+           [org.jobstreamer.artifact.versioning ComparableVersion]
            [java.util.jar JarFile]))
 
 (defn tracer-bullet-fn [])
