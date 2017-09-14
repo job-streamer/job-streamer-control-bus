@@ -74,6 +74,53 @@
                         :batch-component/listener []
                         :batch-component/throwable []})))))))
 
+(defn- jar->artifact [classpath]
+  (let [jar (-> classpath
+                (clojure.string/replace #"file:/" "")
+                io/file
+                JarFile.)
+        pom (some->> (.entries jar)
+                     iterator-seq
+                     (map #(.toString %))
+                     (filter #(clojure.string/includes? % "pom"))
+                     first
+                     (.getEntry jar)
+                     (.getInputStream jar)
+                     io/input-stream
+                     xml/parse)
+        version (some->> pom
+                         :content
+                         (filter #(= (:tag %) :version))
+                         first
+                         :content
+                         first)
+        artifact-id (some->> pom
+                             :content
+                             (filter #(= (:tag %) :artifactId))
+                             first
+                             :content
+                             first)]
+    {:classpath classpath :version version :artifact-id artifact-id}))
+
+(defn- latest-artifact [artifacts]
+  (->> artifacts
+       (map #(assoc % :comparable-version (ComparableVersion. (:version %))))
+       (sort-by :comparable-version)
+       last))
+
+(defn- artifact-distinct [artifacts]
+  (log/error "artifacts" artifacts)
+  (let [{not-comparable false comparable true} (group-by #(and (some? (:artifact-id %))
+                                                               (some? (:version %)))
+                                                         artifacts)
+        ids (->> comparable
+                 (map :artifact-id)
+                 set)]
+    (->> ids
+         (map (fn [id] (filter (fn [artifact] (= id (:artifact-id artifact))) artifacts)))
+         (map latest-artifact)
+         (concat not-comparable))))
+
 (defn- find-batch-component [datomic app-name]
   (d/query datomic
            '{:find [?c .]
@@ -112,52 +159,12 @@
                   (d/transact datomic
                               [[:db.fn/retractEntity batch-component-id]]))
                 (d/transact datomic
-                            [ (merge {:db/id (or batch-component-id
+                            [(merge {:db/id (or batch-component-id
                                                 (d/tempid :db.part/user))
                                      :batch-component/application [:application/name "default"]}
                                     components)]))))
    :handle-ok (fn [ctx]
                 (vals @applications))))
-
-(defn- jar->artifact [classpath]
-  (let [jar (-> classpath
-                (clojure.string/replace #"file:/" "")
-                io/file
-                JarFile.)
-        pom (->> (.entries jar)
-                 iterator-seq
-                 (map #(.toString %))
-                 (filter #(clojure.string/includes? % "pom"))
-                 first
-                 (.getEntry jar)
-                 (.getInputStream jar)
-                 io/input-stream
-                 xml/parse)
-        version (->> (:content pom)
-                     (filter #(= (:tag %) :version))
-                     first
-                     :content
-                     first)
-        artifact-id (->> (:content pom)
-                        (filter #(= (:tag %) :artifactId))
-                        first
-                        :content
-                        first)]
-    {:classpath classpath :version version :artifact-id artifact-id}))
-
-(defn- latest-artifact [artifacts]
-  (->> artifacts
-       (map #(assoc % :comparable-version (ComparableVersion. (:version %))))
-       (sort-by :comparable-version)
-       last))
-
-(defn- artifact-distinct [artifacts]
-  (let [ids (->> artifacts
-                 (map :artifact-id)
-                 set)]
-    (->> ids
-         (map (fn [id] (filter (fn [artifact] (= id (:artifact-id artifact))) artifacts)))
-         (map latest-artifact))))
 
 (defn batch-components-resource [{:keys [datomic applications]} app-name]
   (liberator/resource
@@ -188,17 +195,17 @@
                                              :in $ ?e
                                              :where [?e :application/classpaths ?p]]
                                            app-id)
-                      artifacta (->> (concat classpaths registereds)
-                                     (map jar->artifact))
-                      classpaths (->> (concat classpaths registereds)
-                                     (map jar->artifact)
-                                     artifact-distinct
-                                     (map :classpath))]
-                  (d/transact datomic
-                              (concat (map (fn [path] [:db/retract app-id :application/classpaths path]) registereds)
-                                      [{:db/id app-id
+                      {paths false jars true} (group-by #(ends-with? % ".jar") registereds)
+                      classpaths (->> jars
+                                      (concat classpaths)
+                                      (map jar->artifact)
+                                      artifact-distinct
+                                      (map :classpath)
+                                      (concat paths))]
+                  (d/transact datomic (map (fn [path] [:db/retract app-id :application/classpaths path]) registereds))
+                  (d/transact datomic [{:db/id app-id
                                         :application/description description
-                                        :application/classpaths classpaths}]))
+                                        :application/classpaths classpaths}])
                   (register-app applications {:application/name app-name
                                               :application/classpaths classpaths
                                               :application/description description}))
@@ -217,7 +224,7 @@
                     (d/transact datomic
                                 [[:db.fn/retractEntity batch-component-id]]))
                   (d/transact datomic
-                              [ (merge {:db/id (or batch-component-id
+                              [(merge {:db/id (or batch-component-id
                                                   (d/tempid :db.part/user))
                                        :batch-component/application [:application/name app-name]}
                                       components)])))))
