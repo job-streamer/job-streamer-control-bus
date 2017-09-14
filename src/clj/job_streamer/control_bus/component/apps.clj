@@ -109,7 +109,6 @@
        last))
 
 (defn- artifact-distinct [artifacts]
-  (log/error "artifacts" artifacts)
   (let [{not-comparable false comparable true} (group-by #(and (some? (:artifact-id %))
                                                                (some? (:version %)))
                                                          artifacts)
