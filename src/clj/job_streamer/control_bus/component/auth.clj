@@ -185,7 +185,7 @@
                                               [?app :application/name ?appname]
                                               [?app :application/members ?m]]}
                                     app-name id)]
-                 {::account {:user/id id :applications [{:application/name app-name :roles roles}]}})))
+                 {::account {:user/id id :applications {app-name {:application/name app-name :roles roles}}}})))
 
   :handle-ok (fn [{account ::account}]
                account)))
