@@ -163,7 +163,7 @@
                                 _ (log/infof "Login attempt succeeded with access token : %s." access-token)]
                             (ring-response {:session {:identity (select-keys user [:user/id :permissions])}
                                             :body (pr-str {:token (str access-token)})}))
-                          (do (log/info "Login attempt failed because of authentification failure.")
+                          (do (log/info "Login attempt failed because of authentication failure.")
                             (ring-response {:status 401 :body (pr-str {:messages ["Authentication failure."]})})))))
     :handle-no-content (fn [_] (ring-response {:session {}}))))
 

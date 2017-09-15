@@ -49,20 +49,28 @@
                                 :application/classpaths []})}]
     (handler request)))
 
+(def all-permissions #{:permission/read-calendar
+                       :permission/create-calendar
+                       :permission/update-calendar
+                       :permission/delete-calendar})
+
 (deftest list-resource
   (let [system (new-system config)
         handler (-> (calendar/list-resource (:calendar system)))]
     (create-app system)
     (testing "no calendars"
-      (let [request {:request-method :get}]
+      (let [request {:request-method :get
+                     :identity {:permissions all-permissions}}]
         (is (= [] (-> (handler request) :body edn/read-string)))))
     (testing "name is required"
       (let [request {:request-method :post
+                     :identity {:permissions all-permissions}
                      :content-type "application/edn"
                      :body (pr-str {:calendar/name ""})}]
         (is (= 400 (-> (handler request) :status) ))))
     (testing "create calendars"
       (let [request {:request-method :post
+                     :identity {:permissions all-permissions}
                      :content-type "application/edn"
                      :body (pr-str {:calendar/name "cal"
                                     :calendar/weekly-holiday [true false false false false false true]
@@ -70,19 +78,22 @@
                                     :calendar/day-start "02:00"})}]
         (is (= 201 (-> (handler request) :status)))))
     (testing "get one calendar"
-      (let [request {:request-method :get}
+      (let [request {:request-method :get
+                     :identity {:permissions all-permissions}}
             res (-> (handler request) :body edn/read-string)]
         (is (= 1 (count res)))
         (is (= "cal" (-> res first :calendar/name)))))
     (testing "calendar can cleate if name contains emoji"
       (let [request {:request-method :post
+                     :identity {:permissions all-permissions}
                      :content-type "application/edn"
                      :body (pr-str {:calendar/name "⏰"
                                     :calendar/weekly-holiday [true false false false false false true]
                                     :calendar/holidays []})}]
         (is (= 201 (-> (handler request) :status)))))
     (testing "get two calendar"
-      (let [request {:request-method :get}
+      (let [request {:request-method :get
+                     :identity {:permissions all-permissions}}
             res (->> (handler request) :body edn/read-string (sort-by :calendar/name))]
         (is (= 2 (count res)))
         (is (= "cal" (-> res first :calendar/name)))
@@ -93,19 +104,22 @@
         handler (-> (-> (calendar/list-resource (:calendar system) :download? true)))]
     (testing "export a calendar"
       (let [request {:request-method :post
+                     :identity {:permissions all-permissions}
                      :content-type "application/edn"
                      :body (pr-str {:calendar/name "cal1"
                                     :calendar/weekly-holiday [true false false false false false true]
                                     :calendar/holidays [(.toDate (f/parse (:date f/formatters) "2016-09-01"))]
                                     :calendar/day-start "02:00"})}]
         (is (= 201 (-> ((-> (calendar/list-resource (:calendar system))) request) :status))))
-      (let [request {:request-method :get}
+      (let [request {:request-method :get
+                    :identity {:permissions all-permissions}}
             response (handler request)]
         (is (= "cal1" (-> response :body read-string first :calendar/name)))
         (is (= "application/force-download; charset=utf-8"  ((:headers response) "Content-Type")))
         (is (= "attachment; filename=\"cals.edn\""  ((:headers response) "Content-disposition")))))
     (testing "before export and after import are same"
       (let [request {:request-method :post
+                     :identity {:permissions all-permissions}
                      :content-type "application/edn"
                      :body (pr-str {:calendar/name "cal2"
                                     :calendar/weekly-holiday [true false false false false false true]
@@ -119,6 +133,7 @@
         (for [cal (:body before-response)]
           ((-> (calendar/list-resource (:calendar system)))
            {:request-method :post
+            :identity {:permissions all-permissions}
             :content-type "application/edn"
             :body cal}))
         (is before-response (handler request))))))

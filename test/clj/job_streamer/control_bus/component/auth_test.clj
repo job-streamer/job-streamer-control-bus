@@ -54,7 +54,11 @@
                              :permission/read-job
                              :permission/create-job
                              :permission/delete-job
-                             :permission/execute-job}} (:identity session))))
+                             :permission/execute-job
+                             :permission/read-calendar
+                             :permission/create-calendar
+                             :permission/update-calendar
+                             :permission/delete-calendar}} (:identity session))))
     (testing "login failure, lacking any patameter"
       (let [request {:request-method :post
                      :content-type "application/edn"
@@ -64,7 +68,7 @@
              400                                status
              {:messages ["id must be present"]} (-> body edn/read-string)
              nil                                (:identity session))))
-    (testing "login failure, authentification failure"
+    (testing "login failure, authentication failure"
       (let [request {:request-method :post
                      :content-type "application/edn"
                      :body (pr-str {:user/id "admin" :user/password "badpassword"})}
@@ -84,8 +88,8 @@
                      :body (pr-str {:user/id "addeduser" :user/password "password123"})}
             {:keys [status body session headers] :as res} (handler request)]
         (are [x y] (= x y)
-             {:user/id                              "addeduser"
-              :permissions #{:permission/read-job}} (:identity session))))))
+             {:user/id "addeduser"
+              :permissions #{:permission/read-job :permission/read-calendar}} (:identity session))))))
 
 (deftest logout
   (let [system (new-system config)
