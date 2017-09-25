@@ -307,9 +307,8 @@ public class CronAlternativeTrigger extends AbstractTrigger<CronTrigger> impleme
 
         if (instr == MISFIRE_INSTRUCTION_DO_NOTHING) {
             Date newFireTime = getFireTimeAfter(new Date());
-            while (newFireTime != null && cal != null
-                    && !cal.isTimeIncluded(newFireTime.getTime())) {
-                newFireTime = getFireTimeAfter(newFireTime);
+            if (newFireTime != null && cal != null) {
+                newFireTime = findAlternativeFireTime(cal);
             }
             setNextFireTime(newFireTime);
         } else if (instr == MISFIRE_INSTRUCTION_FIRE_ONCE_NOW) {
@@ -406,9 +405,8 @@ public class CronAlternativeTrigger extends AbstractTrigger<CronTrigger> impleme
         previousFireTime = nextFireTime;
         nextFireTime = getFireTimeAfter(nextFireTime);
 
-        while (nextFireTime != null && calendar != null
-                && !calendar.isTimeIncluded(nextFireTime.getTime())) {
-            nextFireTime = getFireTimeAfter(nextFireTime);
+        if (nextFireTime != null && calendar != null) {
+            nextFireTime = findAlternativeFireTime(calendar);
         }
     }
 
