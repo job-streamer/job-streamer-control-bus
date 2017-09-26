@@ -573,7 +573,8 @@
                 (scheduler/schedule
                   scheduler resolved-job-id
                   (:schedule/cron-notation schedule)
-                  nil) ;; FIXME A Calendar cannot be set here.
+                  nil
+                  (boolean (:schedule/substitution schedule))) ;; FIXME A Calendar cannot be set here.
                 (when posted-job-id
                   (scheduler/unschedule scheduler posted-job-id)))
               job))
@@ -619,10 +620,11 @@
                                   '[{:job/schedule
                                      [:schedule/cron-notation
                                       {:schedule/calendar
-                                       [:calendar/name]}]}] job-id)]
+                                       [:calendar/name]}
+                                      :schedule/substitution]}] job-id)]
              (when-let [cron-notation (:schedule/cron-notation (:job/schedule schedule))]
                (scheduler/unschedule scheduler job-id)
-               (scheduler/schedule scheduler job-id cron-notation (:calendar/name (:schedule/calendar (:job/schedule schedule))))))) ; Because job execute by job name
+               (scheduler/schedule scheduler job-id cron-notation (:calendar/name (:schedule/calendar (:job/schedule schedule))) (:schedule/substitution (:job/schedule schedule)))))) ; Because job execute by job name
    :delete! (fn [{job-id :job-id app-id :app-id}]
               (scheduler/unschedule scheduler job-id)
               (d/transact datomic

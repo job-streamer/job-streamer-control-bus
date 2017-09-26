@@ -75,7 +75,8 @@
            (fields
             [active? :boolean]
             [cron-notation :string]
-            [calendar :ref]))
+            [calendar :ref]
+            [substitution :boolean]))
    (schema calendar
            (fields
             [name :string :unique-value :indexed]

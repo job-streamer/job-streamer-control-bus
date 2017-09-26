@@ -9,18 +9,20 @@
             [bouncer.validators :as v]
             (job-streamer.control-bus [util :refer [parse-body]])
             (job-streamer.control-bus.component [datomic :as d]))
-  (:import [net.unit8.job_streamer.control_bus JobStreamerExecuteJob TimeKeeperJob HolidayAndWeeklyCalendar]
+  (:import [net.unit8.job_streamer.control_bus JobStreamerExecuteJob TimeKeeperJob HolidayAndWeeklyCalendar CronAlternativeScheduleBuilder]
            (org.quartz TriggerBuilder JobBuilder CronScheduleBuilder DateBuilder DateBuilder$IntervalUnit
                        TriggerKey TriggerUtils CronExpression
                        Trigger$TriggerState)
            [org.quartz.impl StdSchedulerFactory]))
 
-(defn- make-trigger [job-id cron-notation calendar-name]
+(defn- make-trigger [job-id cron-notation calendar-name substitution]
   (let [builder (.. (TriggerBuilder/newTrigger)
-                    (withIdentity (str "trigger-" job-id))
-                    (withSchedule (CronScheduleBuilder/cronSchedule cron-notation)))]
+                    (withIdentity (str "trigger-" job-id)))]
     (when calendar-name
       (.modifiedByCalendar builder calendar-name))
+    (if substitution
+      (.withSchedule builder (CronAlternativeScheduleBuilder/cronSchedule cron-notation))
+      (.withSchedule builder (CronScheduleBuilder/cronSchedule cron-notation)))
     (.build builder)))
 
 (defn time-keeper [{:keys [scheduler datomic host port]}
@@ -47,8 +49,8 @@
                       (build))]
     (.scheduleJob scheduler job-deail trigger)))
 
-(defn schedule [{:keys [datomic scheduler host port]} job-id cron-notation calendar-name]
-  (let [new-trigger (make-trigger job-id cron-notation calendar-name)
+(defn schedule [{:keys [datomic scheduler host port]} job-id cron-notation calendar-name substitution]
+  (let [new-trigger (make-trigger job-id cron-notation calendar-name substitution)
         job (d/pull datomic
                     '[:job/name
                       {:job/schedule
@@ -73,7 +75,8 @@
         (d/transact datomic
                     [(merge {:db/id (get-in job [:job/schedule :db/id])
                              :schedule/cron-notation cron-notation
-                             :schedule/active? true}
+                             :schedule/active? true
+                             :schedule/substitution substitution}
                             (when calendar-name
                               {:schedule/calendar [:calendar/name calendar-name]})) ]))
       (do
@@ -81,7 +84,8 @@
         (d/transact datomic
                     [(merge {:db/id #db/id[db.part/user -1]
                              :schedule/cron-notation cron-notation
-                             :schedule/active? true}
+                             :schedule/active? true
+                             :schedule/substitution substitution}
                             (when calendar-name
                               {:schedule/calendar [:calendar/name calendar-name]}))
                          {:db/id job-id
@@ -172,7 +176,8 @@
    :post! (fn [{s :edn}]
             (schedule scheduler job-id
                       (:schedule/cron-notation s)
-                      (get-in s [:schedule/calendar :calendar/name])))
+                      (get-in s [:schedule/calendar :calendar/name])
+                      (boolean (get-in s [:schedule/substitution]))))
    :put! (fn [ctx]
            (case cmd
              :pause  (pause  scheduler job-id)
@@ -199,13 +204,15 @@
         (doseq [[job-id sched] schedules]
           (let [s (d/pull datomic
                           '[:schedule/cron-notation
-                            {:schedule/calendar [:calendar/name]}]
+                            {:schedule/calendar [:calendar/name]}
+                            :schedule/substitution]
                           sched)]
             (log/info "Recover schedule: " job-id)
             (schedule (assoc component :scheduler scheduler)
                       job-id
                       (:schedule/cron-notation s)
-                      (get-in s [:schedule/calendar :calendar/name])))))
+                      (get-in s [:schedule/calendar :calendar/name])
+                      (:schedule/substitution s)))))
       (assoc component :scheduler scheduler)))
 
   (stop [component]
