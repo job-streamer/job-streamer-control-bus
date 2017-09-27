@@ -105,7 +105,7 @@
 (def schema-v4
   [(schema schedule
            (fields
-            [substitution :boolean]))])
+            [substitution? :boolean]))])
 
 (def dbschemas
   [schema-v1 schema-v2 schema-v4])

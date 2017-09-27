@@ -574,7 +574,7 @@
                   scheduler resolved-job-id
                   (:schedule/cron-notation schedule)
                   nil
-                  (boolean (:schedule/substitution schedule))) ;; FIXME A Calendar cannot be set here.
+                  (boolean (:schedule/substitution? schedule))) ;; FIXME A Calendar cannot be set here.
                 (when posted-job-id
                   (scheduler/unschedule scheduler posted-job-id)))
               job))
@@ -621,10 +621,10 @@
                                      [:schedule/cron-notation
                                       {:schedule/calendar
                                        [:calendar/name]}
-                                      :schedule/substitution]}] job-id)]
+                                      :schedule/substitution?]}] job-id)]
              (when-let [cron-notation (:schedule/cron-notation (:job/schedule schedule))]
                (scheduler/unschedule scheduler job-id)
-               (scheduler/schedule scheduler job-id cron-notation (:calendar/name (:schedule/calendar (:job/schedule schedule))) (:schedule/substitution (:job/schedule schedule)))))) ; Because job execute by job name
+               (scheduler/schedule scheduler job-id cron-notation (:calendar/name (:schedule/calendar (:job/schedule schedule))) (:schedule/substitution? (:job/schedule schedule)))))) ; Because job execute by job name
    :delete! (fn [{job-id :job-id app-id :app-id}]
               (scheduler/unschedule scheduler job-id)
               (d/transact datomic
@@ -643,7 +643,7 @@
                                      {:job-execution/agent [:agent/name :agent/instance-id]}]}
                                    {:job/schedule [:schedule/cron-notation
                                                    :schedule/active?
-                                                   :schedule/substitution
+                                                   :schedule/substitution?
                                                    {:schedule/calendar [:calendar/name]}]}]
                                  (:job-id ctx))
                      total (count (:job/executions job))
