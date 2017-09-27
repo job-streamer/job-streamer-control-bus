@@ -15,12 +15,12 @@
                        Trigger$TriggerState)
            [org.quartz.impl StdSchedulerFactory]))
 
-(defn- make-trigger [job-id cron-notation calendar-name substitution]
+(defn- make-trigger [job-id cron-notation calendar-name substitution?]
   (let [builder (.. (TriggerBuilder/newTrigger)
                     (withIdentity (str "trigger-" job-id)))]
     (when calendar-name
       (.modifiedByCalendar builder calendar-name))
-    (if substitution
+    (if substitution?
       (.withSchedule builder (CronAlternativeScheduleBuilder/cronSchedule cron-notation))
       (.withSchedule builder (CronScheduleBuilder/cronSchedule cron-notation)))
     (.build builder)))
@@ -49,8 +49,8 @@
                       (build))]
     (.scheduleJob scheduler job-deail trigger)))
 
-(defn schedule [{:keys [datomic scheduler host port]} job-id cron-notation calendar-name substitution]
-  (let [new-trigger (make-trigger job-id cron-notation calendar-name substitution)
+(defn schedule [{:keys [datomic scheduler host port]} job-id cron-notation calendar-name substitution?]
+  (let [new-trigger (make-trigger job-id cron-notation calendar-name substitution?)
         job (d/pull datomic
                     '[:job/name
                       {:job/schedule
@@ -76,7 +76,7 @@
                     [(merge {:db/id (get-in job [:job/schedule :db/id])
                              :schedule/cron-notation cron-notation
                              :schedule/active? true
-                             :schedule/substitution substitution}
+                             :schedule/substitution? substitution?}
                             (when calendar-name
                               {:schedule/calendar [:calendar/name calendar-name]})) ]))
       (do
@@ -85,7 +85,7 @@
                     [(merge {:db/id #db/id[db.part/user -1]
                              :schedule/cron-notation cron-notation
                              :schedule/active? true
-                             :schedule/substitution substitution}
+                             :schedule/substitution? substitution?}
                             (when calendar-name
                               {:schedule/calendar [:calendar/name calendar-name]}))
                          {:db/id job-id
@@ -177,7 +177,7 @@
             (schedule scheduler job-id
                       (:schedule/cron-notation s)
                       (get-in s [:schedule/calendar :calendar/name])
-                      (boolean (get-in s [:schedule/substitution]))))
+                      (boolean (get-in s [:schedule/substitution?]))))
    :put! (fn [ctx]
            (case cmd
              :pause  (pause  scheduler job-id)
@@ -205,14 +205,14 @@
           (let [s (d/pull datomic
                           '[:schedule/cron-notation
                             {:schedule/calendar [:calendar/name]}
-                            :schedule/substitution]
+                            :schedule/substitution?]
                           sched)]
             (log/info "Recover schedule: " job-id)
             (schedule (assoc component :scheduler scheduler)
                       job-id
                       (:schedule/cron-notation s)
                       (get-in s [:schedule/calendar :calendar/name])
-                      (:schedule/substitution s)))))
+                      (:schedule/substitution? s)))))
       (assoc component :scheduler scheduler)))
 
   (stop [component]
