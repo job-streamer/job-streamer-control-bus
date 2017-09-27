@@ -641,7 +641,10 @@
                                      :job-execution/exit-status
                                      {:job-execution/batch-status [:db/ident]}
                                      {:job-execution/agent [:agent/name :agent/instance-id]}]}
-                                   {:job/schedule [:schedule/cron-notation :schedule/active?]}]
+                                   {:job/schedule [:schedule/cron-notation
+                                                   :schedule/active?
+                                                   :schedule/substitution
+                                                   {:schedule/calendar [:calendar/name]}]}]
                                  (:job-id ctx))
                      total (count (:job/executions job))
                      success (->> (:job/executions job)
