@@ -75,8 +75,7 @@
            (fields
             [active? :boolean]
             [cron-notation :string]
-            [calendar :ref]
-            [substitution :boolean]))
+            [calendar :ref]))
    (schema calendar
            (fields
             [name :string :unique-value :indexed]
@@ -85,23 +84,28 @@
             [day-start :string]))
    (schema member
            (fields
-             [user :ref]
-             [roles :ref :many]))
+            [user :ref]
+            [roles :ref :many]))
    (schema user
            (fields
-             [id :string :indexed :unique-value]
-             [password :string]
-             [salt :bytes]
-             [token :string]))
+            [id :string :indexed :unique-value]
+            [password :string]
+            [salt :bytes]
+            [token :string]))
    (schema role
            (fields
-             [name :string :indexed :unique-value]
-             [permissions :keyword :many]))])
+            [name :string :indexed :unique-value]
+            [permissions :keyword :many]))])
 
 (def schema-v2
   [(schema schema
            (fields
              [version :long]))])
 
+(def schema-v4
+  [(schema schedule
+           (fields
+            [substitution :boolean]))])
+
 (def dbschemas
-  [schema-v1 schema-v2])
+  [schema-v1 schema-v2 schema-v4])
