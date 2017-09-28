@@ -24,6 +24,7 @@
   (routes
    ;; Auth
    (ANY "/auth" request (auth/auth-resource auth))
+   (ANY "/account" [] (auth/account-resource auth))
    (ANY "/users" [] (auth/list-resource auth))
    (ANY "/user" [] (auth/entry-resource auth nil))
    (ANY ["/user/:user-id" :user-id #".*"] [user-id] (auth/entry-resource auth user-id))
