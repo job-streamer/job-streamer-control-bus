@@ -75,10 +75,10 @@
                         :batch-component/throwable []})))))))
 
 (defn- jar->artifact [classpath]
-  (let [jar (-> classpath
-                (clojure.string/replace #"file:/" "")
-                io/file
-                JarFile.)
+  (let [file (-> classpath
+                 (clojure.string/replace #"file:" "")
+                 io/file)
+        jar (when (.exists file) (JarFile. file))
         pom (some->> (.entries jar)
                      iterator-seq
                      (map #(.toString %))
@@ -100,7 +100,7 @@
                              first
                              :content
                              first)]
-    (.close jar)
+    (when jar (.close jar))
     {:classpath classpath :version version :artifact-id artifact-id}))
 
 (defn- latest-artifact [artifacts]
