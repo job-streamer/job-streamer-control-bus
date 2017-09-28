@@ -11,6 +11,8 @@ import org.jsoup.select.NodeVisitor;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Parse BPMN file.
@@ -30,6 +32,7 @@ public class BpmnParser {
         final Map<String, Element> batchComponents = new HashMap<>();
         final Map<String, Element> transitions = new HashMap<>();
         final Map<String, Element> endEvents = new HashMap<>();
+        final List<String> startBatchIds = new ArrayList<>();
 
         doc.traverse(new NodeVisitor() {
             @Override
@@ -41,12 +44,12 @@ public class BpmnParser {
                         batchComponents.put(node.attr("id"), (Element) node);
                         break;
                     case "jsr352:transition":
-                        transitions.put(node.attr("id"), (Element)node);
+                        transitions.put(node.attr("id"), (Element) node);
                         break;
                     case "jsr352:end":
                     case "jsr352:fail":
                     case "jsr352:stop":
-                        endEvents.put(node.attr("id"), (Element)node);
+                        endEvents.put(node.attr("id"), (Element) node);
                         break;
                     default:
                 }
@@ -58,10 +61,15 @@ public class BpmnParser {
             }
         });
 
+        for (Element outgoing : doc.select("jsr352|start > bpmn|outgoing")) {
+            Element transition = transitions.get(outgoing.text().trim());
+            startBatchIds.add(transition.attr("targetRef"));
+        }
+
         Document root = new Document("");
         root.outputSettings().syntax(Document.OutputSettings.Syntax.xml);
 
-        doc.traverse(new BpmnStructureVisitor(root, transitions, batchComponents, endEvents));
+        doc.traverse(new BpmnStructureVisitor(root, transitions, batchComponents, endEvents, startBatchIds));
         return root;
     }
 }

@@ -9,6 +9,7 @@ import org.jsoup.select.NodeVisitor;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -25,15 +26,18 @@ public class BpmnStructureVisitor implements NodeVisitor {
     private Map<String, Element> transitions;
     private Map<String, Element> batchComponents;
     private Map<String, Element> endEvents;
+    private List<String> startBatchIds;
 
     public BpmnStructureVisitor(Element root,
                                 Map<String, Element> transitions,
                                 Map<String, Element> batchComponents,
-                                Map<String, Element> endEvents) {
+                                Map<String, Element> endEvents,
+                                List<String> startBatchIds) {
         current = root;
         this.transitions = transitions;
         this.endEvents = endEvents;
         this.batchComponents = batchComponents;
+        this.startBatchIds = startBatchIds;
     }
 
     private void parseProperties(Element bpmnEl, Element jobEl) {
@@ -110,6 +114,7 @@ public class BpmnStructureVisitor implements NodeVisitor {
     @Override
     public void head(Node node, int i) {
         Element el;
+        final String id = or(node.attr("name"), node.attr("id"));
         switch(node.nodeName()) {
             case "jsr352:job":
                 el = new Element(Tag.valueOf("job"), "");
@@ -121,11 +126,13 @@ public class BpmnStructureVisitor implements NodeVisitor {
                 current = el;
                 break;
             case "jsr352:step":
-                el = current.appendElement("step");
-                el.attr("id", or(
-                        node.attr("name"),
-                        node.attr("id")
-                ));
+                if (startBatchIds.contains(id)
+                    || (current.tagName().equals("flow") && ((Element) node).select("> bpmn|incoming").isEmpty())) {
+                    el = current.prependElement("step");
+                } else {
+                    el = current.appendElement("step");
+                }
+                el.attr("id", id);
                 copyAttribute(el, (Element) node, "start-limit");
                 copyAttribute(el, (Element) node, "allow-start-if-complete");
                 parseProperties((Element) node, el);
@@ -145,23 +152,25 @@ public class BpmnStructureVisitor implements NodeVisitor {
                 current = el;
                 break;
             case "jsr352:flow":
-                el = current.appendElement("flow")
-                        .attr("id", or(
-                                node.attr("name"),
-                                node.attr("id")
-                        ));
+                if (startBatchIds.contains(id)
+                    || (current.tagName().equals("flow") && ((Element) node).select("> bpmn|incoming").isEmpty())) {
+                    el = current.prependElement("flow");
+                } else {
+                    el = current.appendElement("flow");
+                }
+                el.attr("id", id);
                 parseTransition((Element) node, el);
-                current.appendChild(el);
                 current = el;
                 break;
             case "jsr352:split":
-                el = current.appendElement("split")
-                        .attr("id", or(
-                                node.attr("name"),
-                                node.attr("id")
-                        ));
+                if (startBatchIds.contains(id)
+                    || (current.tagName().equals("flow") && ((Element) node).select("> bpmn|incoming").isEmpty())) {
+                    el = current.prependElement("split");
+                } else {
+                    el = current.appendElement("split");
+                }
+                el.attr("id", id);
                 parseTransition((Element) node, el);
-                current.appendChild(el);
                 current = el;
                 break;
             case "jsr352:batchlet":
