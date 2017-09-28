@@ -592,6 +592,6 @@
                                 <batchlet ref=\"example.HelloBatch\"></batchlet>
                                 </step>
                                 </job>")
-           "<job id=\"2\"> \n <step id=\"1\"> \n  <next on=\"*\" to=\"2\"></next> \n  <listeners></listeners>  \n  <batchlet ref=\"org.jobstreamer.batch.TestBatchlet\"></batchlet>\n </step> \n <step id=\"2\">  \n  <batchlet ref=\"org.jobstreamer.batch.TestBatchlet\"></batchlet>\n </step> \n</job>"))))
+           "<job id=\"2\"> \n <step id=\"1\"> \n  <next on=\"*\" to=\"2\"></next>   \n  <batchlet ref=\"org.jobstreamer.batch.TestBatchlet\"></batchlet>\n </step> \n <step id=\"2\">  \n  <batchlet ref=\"org.jobstreamer.batch.TestBatchlet\"></batchlet>\n </step> \n</job>"))))
 
 
