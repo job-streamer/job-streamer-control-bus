@@ -80,7 +80,7 @@
                  io/file)
         jar (when (.exists file) (JarFile. file))
         pom (some->> (.entries jar)
-                     iterator-seq
+                     enumeration-seq
                      (map #(.toString %))
                      (filter #(clojure.string/includes? % "pom"))
                      first
