@@ -100,6 +100,7 @@
                              first
                              :content
                              first)]
+    (.close jar)
     {:classpath classpath :version version :artifact-id artifact-id}))
 
 (defn- latest-artifact [artifacts]

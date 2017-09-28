@@ -82,7 +82,7 @@
     (testing "upload a jar"
       (let [request {:request-method :post
                      :content-type "application/octet-stream"
-                     :params {"file" {:filename "test.jar" :tempfile (-> "test.tmp" io/resource io/file) :size 13}}}
+                     :params {"file" {:filename "test.jar" :tempfile (-> "test.zip" io/resource io/file) :size 13}}}
             uploaded (io/file "batch-components/default/test.jar")
             delete-updated #(when (.exists uploaded)
                               (io/delete-file uploaded))]
