@@ -477,9 +477,11 @@
  (let [jobxml (Jsoup/parse  jobxml-str "" (Parser/xmlParser))
        steps (.select jobxml "step")
        batchlets (.select jobxml "step > batchlet")
-       chunks (.select jobxml "step > chunk")]
+       chunks (.select jobxml "step > chunk")
+       listeners (.select jobxml "listeners")]
      (.remove batchlets)
      (.remove chunks)
+     (.remove listeners)
    (doall
      (map #(.appendChild % (some-> (Tag/valueOf "batchlet") (Element. "") (.attr "ref" "org.jobstreamer.batch.TestBatchlet"))) steps))
    (.toString jobxml)))
