@@ -2,6 +2,7 @@
   (:require [clojure.tools.logging :as log]
             [clojure.java.io :as io]
             [clojure.string :refer [ends-with?]]
+            [clojure.xml :as xml]
             [com.stuartsierra.component :as component]
             [liberator.core :as liberator]
             [bouncer.validators :as v]
@@ -10,7 +11,9 @@
             (job-streamer.control-bus.component [datomic :as d]
                                                 [agents :as ag]))
   (:import [java.net URL]
-           [net.unit8.wscl ClassLoaderHolder]))
+           [net.unit8.wscl ClassLoaderHolder]
+           [org.jobstreamer.artifact.versioning ComparableVersion]
+           [java.util.jar JarFile]))
 
 (defn tracer-bullet-fn [])
 
@@ -71,6 +74,52 @@
                         :batch-component/listener []
                         :batch-component/throwable []})))))))
 
+(defn- jar->artifact [classpath]
+  (let [jar (-> classpath
+                (clojure.string/replace #"file:/" "")
+                io/file
+                JarFile.)
+        pom (some->> (.entries jar)
+                     iterator-seq
+                     (map #(.toString %))
+                     (filter #(clojure.string/includes? % "pom"))
+                     first
+                     (.getEntry jar)
+                     (.getInputStream jar)
+                     io/input-stream
+                     xml/parse)
+        version (some->> pom
+                         :content
+                         (filter #(= (:tag %) :version))
+                         first
+                         :content
+                         first)
+        artifact-id (some->> pom
+                             :content
+                             (filter #(= (:tag %) :artifactId))
+                             first
+                             :content
+                             first)]
+    {:classpath classpath :version version :artifact-id artifact-id}))
+
+(defn- latest-artifact [artifacts]
+  (->> artifacts
+       (map #(assoc % :comparable-version (ComparableVersion. (:version %))))
+       (sort-by :comparable-version)
+       last))
+
+(defn- artifact-distinct [artifacts]
+  (let [{not-comparable false comparable true} (group-by #(and (some? (:artifact-id %))
+                                                               (some? (:version %)))
+                                                         artifacts)
+        ids (->> comparable
+                 (map :artifact-id)
+                 set)]
+    (->> ids
+         (map (fn [id] (filter (fn [artifact] (= id (:artifact-id artifact))) artifacts)))
+         (map latest-artifact)
+         (concat not-comparable))))
+
 (defn- find-batch-component [datomic app-name]
   (d/query datomic
            '{:find [?c .]
@@ -109,7 +158,7 @@
                   (d/transact datomic
                               [[:db.fn/retractEntity batch-component-id]]))
                 (d/transact datomic
-                            [ (merge {:db/id (or batch-component-id
+                            [(merge {:db/id (or batch-component-id
                                                 (d/tempid :db.part/user))
                                      :batch-component/application [:application/name "default"]}
                                     components)]))))
@@ -140,25 +189,41 @@
                                        :in $ ?n
                                        :where [?e :application/name ?n]]
                                      app-name)]
-                (d/transact datomic
-                            [{:db/id app-id
-                              :application/description description
-                              :application/classpaths classpaths}])
-                (d/transact datomic
-                            [{:db/id #db/id[db.part/user -1]
-                              :application/name app-name
-                              :application/description description
-                              :application/classpaths classpaths}]))
-              (register-app applications {:application/name app-name
-                                          :application/classpaths classpaths
-                                          :application/description description})
+                (let [registereds (d/query datomic
+                                           '[:find [?p ...]
+                                             :in $ ?e
+                                             :where [?e :application/classpaths ?p]]
+                                           app-id)
+                      {paths false jars true} (group-by #(ends-with? % ".jar") registereds)
+                      classpaths (->> jars
+                                      (concat classpaths)
+                                      (map jar->artifact)
+                                      artifact-distinct
+                                      (map :classpath)
+                                      (concat paths))]
+                  (d/transact datomic (map (fn [path] [:db/retract app-id :application/classpaths path]) registereds))
+                  (d/transact datomic [{:db/id app-id
+                                        :application/description description
+                                        :application/classpaths classpaths}])
+                  (register-app applications {:application/name app-name
+                                              :application/classpaths classpaths
+                                              :application/description description}))
+                (do (d/transact datomic
+                                [{:db/id #db/id[db.part/user -1]
+                                  :application/name app-name
+                                  :application/description description
+                                  :application/classpaths classpaths}])
+                    (register-app applications {:application/name app-name
+                                                :application/classpaths classpaths
+                                                :application/description description})))
+
               (when-let [components (scan-components classpaths)]
                 (let [batch-component-id (find-batch-component datomic app-name)]
                   (when batch-component-id
                     (d/transact datomic
                                 [[:db.fn/retractEntity batch-component-id]]))
                   (d/transact datomic
-                              [ (merge {:db/id (or batch-component-id
+                              [(merge {:db/id (or batch-component-id
                                                   (d/tempid :db.part/user))
                                        :batch-component/application [:application/name app-name]}
                                       components)])))))
