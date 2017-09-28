@@ -24,7 +24,10 @@
                                                   :unknown]]
                                   [:log-level [:trace :debug :info :warn :error]]
                                   [:action [:abandon :stop :alert]])
-                  (s/generate-schema (apply concat dbschemas)))]
+                  (->> dbschemas
+                       (take 2)
+                       (apply concat)
+                       s/generate-schema))]
     (d/transact datomic schema)
     (log/info "Create an initial app, user and roles.")
     (d/transact datomic [{:db/id (d/tempid :db.part/user)
@@ -101,6 +104,13 @@
                        {:db/id (find-schema-id datomic) :schema/version 3}])
   (log/info "Succeeded migration-v3."))
 
+(defn- migration-v4 [datomic dbschemas]
+  (log/info "Start migration-v4.")
+  (let [schema (s/generate-schema (nth dbschemas 2))
+        version [{:db/id (find-schema-id datomic) :schema/version 4}]]
+    (d/transact datomic (concat schema version)))
+  (log/info "Succeeded migration-v4."))
+
 (defrecord Migration [datomic dbschemas]
   component/Lifecycle
 
@@ -121,6 +131,9 @@
 
     (when (= 2 (find-schema-version datomic))
       (migration-v3 datomic))
+
+    (when (= 3 (find-schema-version datomic))
+      (migration-v4 datomic dbschemas))
 
     (log/info "schema version" (find-schema-version datomic))
     component)
