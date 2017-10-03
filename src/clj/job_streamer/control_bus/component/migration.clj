@@ -111,6 +111,16 @@
     (d/transact datomic (concat schema version)))
   (log/info "Succeeded migration-v4."))
 
+(defn- migration-v5 [datomic]
+  (log/info "Start migration-v5.")
+  (let [schedules (d/query datomic
+                           '[:find [?schedule ...]
+                             :where [?job :job/schedule ?schedule]])
+        add-query (map #(hash-map :db/id % :schedule/substitution? false) schedules)
+        version [{:db/id (find-schema-id datomic) :schema/version 5}]]
+    (d/transact datomic (concat add-query version)))
+  (log/info "Succeeded migration-v5."))
+
 (defrecord Migration [datomic dbschemas]
   component/Lifecycle
 
@@ -134,6 +144,9 @@
 
     (when (= 3 (find-schema-version datomic))
       (migration-v4 datomic dbschemas))
+
+    (when (= 4 (find-schema-version datomic))
+      (migration-v5 datomic))
 
     (log/info "schema version" (find-schema-version datomic))
     component)
