@@ -1,11 +1,15 @@
-#
-# JobStreamer control-bus
-#
 FROM openjdk:8-jdk
 
-RUN mkdir -p /opt/job-streamer
-ARG version
-ADD https://github.com/job-streamer/job-streamer-control-bus/releases/download/v${version}/job-streamer-control-bus-${version}-dist.zip /opt/job-streamer/
-RUN unzip /opt/job-streamer/job-streamer-control-bus-${version}-dist.zip -d /opt/job-streamer/
-RUN rm -f /opt/job-streamer/job-streamer-control-bus-${version}-dist.zip
-CMD [ "sh", "-c", "cd /opt/job-streamer/job-streamer-control-bus-${version} && bin/control_bus" ]
+ENV LEIN_ROOT 1
+
+RUN curl -L -s https://raw.githubusercontent.com/technomancy/leiningen/stable/bin/lein > \
+   /usr/local/bin/lein \
+ && chmod 0755 /usr/local/bin/lein \
+ && lein upgrade
+
+RUN mkdir -p /opt/job-streamer/job-streamer-control-bus
+WORKDIR /opt/job-streamer/job-streamer-control-bus
+ADD ./ ./
+
+RUN lein deps
+CMD lein run
