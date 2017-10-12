@@ -120,6 +120,9 @@ public class BpmnStructureVisitor implements NodeVisitor {
                 el = new Element(Tag.valueOf("job"), "");
                 el.attr("id", or(
                         node.attr("name"), node.attr("bpmn:name"), node.attr("id")));
+                if(node.hasAttr("restartable")){
+                    el.attr("restartable", node.attr("restartable"));
+                }
                 parseListeners((Element) node, el);
                 parseProperties((Element) node, el);
                 current.appendChild(el);
