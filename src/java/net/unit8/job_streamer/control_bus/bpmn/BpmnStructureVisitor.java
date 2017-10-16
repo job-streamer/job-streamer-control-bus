@@ -89,6 +89,8 @@ public class BpmnStructureVisitor implements NodeVisitor {
                         stopEl.attr("on", on);
                         if (endEvent.hasAttr("exit-status"))
                             stopEl.attr("exit-status", endEvent.attr("exit-status"));
+                        if(endEvent.hasAttr("restart"))
+                            stopEl.attr("restart", endEvent.attr("restart"));
                         break;
                 }
             } else if (batchComponents.containsKey(targetRef)) {
