@@ -116,7 +116,7 @@ public class BpmnStructureVisitor implements NodeVisitor {
     @Override
     public void head(Node node, int i) {
         Element el;
-        final String id = or(node.attr("name"), node.attr("id"));
+        final String id = node.attr("id");
         switch(node.nodeName()) {
             case "jsr352:job":
                 el = new Element(Tag.valueOf("job"), "");
@@ -125,8 +125,8 @@ public class BpmnStructureVisitor implements NodeVisitor {
                 if(node.hasAttr("restartable")){
                     el.attr("restartable", node.attr("restartable"));
                 }
-                parseListeners((Element) node, el);
                 parseProperties((Element) node, el);
+                parseListeners((Element) node, el);
                 current.appendChild(el);
                 current = el;
                 break;
@@ -137,7 +137,10 @@ public class BpmnStructureVisitor implements NodeVisitor {
                 } else {
                     el = current.appendElement("step");
                 }
-                el.attr("id", id);
+                el.attr("id", or(
+                        node.attr("name"),
+                        node.attr("id")
+                ));
                 copyAttribute(el, (Element) node, "start-limit");
                 copyAttribute(el, (Element) node, "allow-start-if-complete");
                 parseProperties((Element) node, el);
@@ -163,7 +166,10 @@ public class BpmnStructureVisitor implements NodeVisitor {
                 } else {
                     el = current.appendElement("flow");
                 }
-                el.attr("id", id);
+                el.attr("id", or(
+                        node.attr("name"),
+                        node.attr("id")
+                ));
                 parseTransition((Element) node, el);
                 current = el;
                 break;
@@ -174,7 +180,10 @@ public class BpmnStructureVisitor implements NodeVisitor {
                 } else {
                     el = current.appendElement("split");
                 }
-                el.attr("id", id);
+                el.attr("id", or(
+                        node.attr("name"),
+                        node.attr("id")
+                ));
                 parseTransition((Element) node, el);
                 current = el;
                 break;
