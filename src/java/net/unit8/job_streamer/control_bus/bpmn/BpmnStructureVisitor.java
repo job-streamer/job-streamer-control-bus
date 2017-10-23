@@ -89,6 +89,8 @@ public class BpmnStructureVisitor implements NodeVisitor {
                         stopEl.attr("on", on);
                         if (endEvent.hasAttr("exit-status"))
                             stopEl.attr("exit-status", endEvent.attr("exit-status"));
+                        if(endEvent.hasAttr("restart"))
+                            stopEl.attr("restart", endEvent.attr("restart"));
                         break;
                 }
             } else if (batchComponents.containsKey(targetRef)) {
@@ -120,6 +122,9 @@ public class BpmnStructureVisitor implements NodeVisitor {
                 el = new Element(Tag.valueOf("job"), "");
                 el.attr("id", or(
                         node.attr("name"), node.attr("bpmn:name"), node.attr("id")));
+                if(node.hasAttr("restartable")){
+                    el.attr("restartable", node.attr("restartable"));
+                }
                 parseProperties((Element) node, el);
                 parseListeners((Element) node, el);
                 current.appendChild(el);
